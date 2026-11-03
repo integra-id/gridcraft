@@ -267,8 +267,11 @@ impl SheetApp {
             });
         }
         dialogs::show(self, &ctx);
-        macro_ui::forget_closed_editor(self);
-        macro_ui::question_box(self, &ctx);
+        // The macro editor and macro questions: the viewer runs no macros.
+        if viewer::EDITOR {
+            macro_ui::forget_closed_editor(self);
+            macro_ui::question_box(self, &ctx);
+        }
         widgets::message_box(self, &ctx);
         widgets::toast(self, &ctx);
         // Requests are admitted in `logic`, for the root viewport, so only its pass issues them.

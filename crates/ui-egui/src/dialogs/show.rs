@@ -126,7 +126,7 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
     let Some(mut d) = app.dialog.take() else { return };
     let home = app.ui_window();
     // The macro step editor is a large resizable window of its own.
-    if d.name == "macroEditor" {
+    if crate::viewer::EDITOR && d.name == "macroEditor" {
         let mut open = true;
         crate::macro_editor::window(app, ctx, &mut d, &mut open);
         if !open {

@@ -338,7 +338,8 @@ fn show_grid_interactions(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Re
     }
     update_cursor(app, ui, resp, geo, sh);
     crate::text_box::show(app, ui, geo, sh);
-    if app.editor.as_ref().is_some_and(|e| !e.from_formula_bar) {
+    // The viewer never edits: without the editor feature the cell editor is left out.
+    if crate::viewer::EDITOR && app.editor.as_ref().is_some_and(|e| !e.from_formula_bar) {
         in_cell_editor(app, ui, geo, sh, wb);
     }
     filter_menu(app, ui, geo, previous_popups.0 == app.grid.filter_menu);
@@ -723,7 +724,9 @@ pub(crate) fn paint_overlays(input: OverlayInput<'_>) {
             ui.label(tip);
         });
     }
-    if let Some(o) = &app.grid.macro_overlay {
+    if crate::viewer::EDITOR
+        && let Some(o) = &app.grid.macro_overlay
+    {
         crate::macro_editor::paint_overlay(p, geo, sh, o);
     }
     // Trace Precedents, Trace Dependents and Trace Error arrows.

@@ -184,7 +184,7 @@ fn editor_json(app: &SheetApp, e: &crate::editor::EditState) -> Json {
 /// and selection from before a reference box picked.
 fn dialog_cancel(app: &mut SheetApp) -> Outcome {
     // The macro step editor's draft, overlays and debug run go with its own close.
-    if app.dialog.as_ref().is_some_and(|d| d.name == "macroEditor") {
+    if crate::viewer::EDITOR && app.dialog.as_ref().is_some_and(|d| d.name == "macroEditor") {
         return match crate::macro_editor::close_now(app) {
             Ok(()) => ok(Json::Null),
             Err(e) => err(e),

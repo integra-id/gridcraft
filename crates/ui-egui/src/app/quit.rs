@@ -14,7 +14,7 @@ impl SheetApp {
         }
         // The macro step editor asks about its own unsaved steps and debug run first; once it has
         // closed, the window close goes on.
-        if self.dialog.as_ref().is_some_and(|d| d.name == "macroEditor") {
+        if crate::viewer::EDITOR && self.dialog.as_ref().is_some_and(|d| d.name == "macroEditor") {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             crate::macro_editor::request_close(self, true);
             return;
@@ -98,7 +98,9 @@ impl SheetApp {
         // The macro step editor asks about its own unsaved steps and debug run first, as for the
         // window's close button, in the window it is shown in; once it has closed, the quit goes
         // on, and Cancel stops it.
-        if let Some(window) = self.window_with_dialog("macroEditor") {
+        if crate::viewer::EDITOR
+            && let Some(window) = self.window_with_dialog("macroEditor")
+        {
             if self.ui_window() != Some(window) {
                 self.enter_window(window);
             }
