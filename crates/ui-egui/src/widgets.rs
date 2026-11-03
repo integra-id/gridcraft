@@ -186,14 +186,25 @@ pub fn small_button(ui: &mut Ui, icon: Icon, label: &str, tip: &str, dropdown: b
     small_button_accent(ui, icon, None, label, tip, dropdown)
 }
 
+/// The width of a [`small_button`] with `label` (translated; `""` for icon only).
+pub fn small_button_width(ui: &Ui, label: &str, dropdown: bool) -> f32 {
+    let label = tr(ui, label);
+    let tw = if label.is_empty() {
+        0.0
+    } else {
+        let t = Tokens::get(ui.ctx());
+        ui.painter().layout_no_wrap(label.to_string(), theme::ui_font(12.5), t.text).size().x + 6.0
+    };
+    24.0 + tw + if dropdown { 12.0 } else { 0.0 }
+}
+
 /// Small ribbon button whose icon takes an accent colour (see [`icons::paint_accent`]); `None`
 /// draws it like [`small_button`]. A labelled button reports its label to accessibility.
 pub fn small_button_accent(ui: &mut Ui, icon: Icon, accent: Option<Color32>, label: &str, tip: &str, dropdown: bool) -> Response {
     let t = Tokens::get(ui.ctx());
     let font = theme::ui_font(12.5);
+    let w = small_button_width(ui, label, dropdown);
     let label = tr(ui, label);
-    let tw = if label.is_empty() { 0.0 } else { ui.painter().layout_no_wrap(label.to_string(), font.clone(), t.text).size().x + 6.0 };
-    let w = 24.0 + tw + if dropdown { 12.0 } else { 0.0 };
     let (rect, resp) = ui.allocate_exact_size(vec2(w, 23.0), Sense::click());
     if resp.is_pointer_button_down_on() {
         ui.painter().rect_filled(rect, 4.0, t.pressed);
