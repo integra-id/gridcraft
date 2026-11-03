@@ -157,6 +157,19 @@ https://example.com/gridcraft/?url=https%3A%2F%2Ffiles.example.org%2Fq3.ods&name
   (whose Backstage view then never opens); `?chrome=notitlebar` or `?chrome=nofiletab` leave out just
   one. Use them when the host window already shows the file name and owns the files, so the sheet's
   own Open or Save As cannot replace what the host thinks is open. Everything stays on by default.
+- **Hiding or disabling features:** `?hide=open,export,print&disable=pdf` leaves the named features
+  out (*hide*) or greys them out (*disable*); their shortcuts, menu items and dialogs are off too, and
+  `?hide=drop` stops dropped files from opening. Names are comma-separated and case-insensitive; a
+  feature in both lists is hidden; unknown names are ignored with a warning in the browser console.
+  The names are `file`, `open`, `drop`, `samples`, `export`, `pdf`, `print`, `find`, `goto`, `copy`,
+  `view`, `zoom`, `options`, `theme` and `language` (`open` includes `drop`, `export` includes
+  `pdf`, `options` includes `theme` and `language`); `docs/viewer.md` in the source says what
+  each covers. There is no `spelling`: the viewer has no spelling or grammar checking. This is
+  presentation, not security: a user with the page's address can drop the parameters.
+- **Host page (`?host=parent`):** a same-origin parent can change the features at any time with
+  `iframe.contentWindow.postMessage({ type: "gridcraft:config", hide: "open,print", disable: ["pdf"] }, location.origin)`
+  (each list a comma-separated string or an array of names). A message replaces the lists the page
+  started with; a list left out shows those features again.
 
 ## Renderer selection
 
@@ -177,3 +190,4 @@ A browser with neither WebGPU nor WebGL2 gets a message in place of the app.
 | `?url=ADDRESS` / `?src=ADDRESS` (`&name=NAME`) | Open the workbook at that address (*Opening a workbook from an address*) |
 | `?chrome=none\|notitlebar\|nofiletab` | Leave out the title bar and/or the File tab |
 | `?host=parent` (`&author=`) | Same-origin host page sends the workbook and stores saves |
+| `?hide=NAMES` / `?disable=NAMES` | Leave out or grey out features (`open,export,print`…; see *Embedding in a page*) |

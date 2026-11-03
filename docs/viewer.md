@@ -71,6 +71,7 @@ ribbon and the formula bar:
 - In the centre: the workbook's name and a green **Read only** badge.
 - On the right: **View ▾** (see *View adjustments*), **Find**, **−**, the zoom percentage (click it for 100%), **+** and **Fit** (fits the
   sheet's used range in the window, 25–200%).
+- An embedder can hide or grey out any of these buttons (*Hiding or disabling features*).
 - In a narrow window the buttons drop their labels (each keeps its icon and tooltip; **Fit**
   keeps its label), then the zoom steps (− % +), so the two groups never overlap
   (`viewer::bar_fit`). The workbook's name goes before the badge does, and neither spills over
@@ -81,6 +82,51 @@ open the window shows *GridCraft Viewer* and an **Open a workbook…** button. F
 lists the built-in samples (budget, sales, grades). One opens read-only, in place of the empty
 window, through `sample::open` (`viewer::open_sample`). The window title is
 `<name> - GridCraft Viewer`.
+
+## Hiding or disabling features (embedders)
+
+A host that embeds the viewer can leave features out (**hidden**: not drawn) or grey them out
+(**disabled**: drawn, but they don't respond). Either way the feature is off in function too: its
+keyboard shortcuts, menu items, command search entries and dialogs do nothing (a disabled one
+says *This is turned off here.* in a toast; a hidden one is silent). Everything is shown by
+default.
+
+- **Web:** `?hide=open,export,print&disable=pdf` (see `packaging/web/README.md`). A host page in
+  `?host=parent` mode can send the same lists later as a `gridcraft:config` message.
+- **Desktop:** `gridcraft --hide=open,export,print --disable=pdf book.xlsx` (`--hide open` works
+  too; repeated flags add up).
+
+Lists are comma-separated, case-insensitive and may have spaces. A feature in both lists is
+hidden. Unknown names are ignored with a warning in the log (the browser console on the web).
+The parsing and gating live in `crates/ui-egui/src/features.rs` (`Features`).
+
+| Name | What it covers |
+|---|---|
+| `file` | The **File** button and the File page (Backstage) with all its pages |
+| `open` | **Open**, Ctrl+O, File › Open's Browse and Recent, the empty window's **Open a workbook…** button; also turns off `drop` |
+| `drop` | Opening files dropped on the window |
+| `samples` | The built-in samples on File › Open |
+| `export` | **Export ▾** and File › Export: PDF, CSV, HTML and the Excel copy (also turns off `pdf`) |
+| `pdf` | Export as PDF only |
+| `print` | **Print**, Ctrl+P and File › Print |
+| `find` | **Find**, Ctrl+F/Ctrl+H/Shift+F5, Find Next/Previous |
+| `goto` | Go To and Go To Special (Ctrl+G, F5), and the menu item |
+| `copy` | Copying cells (Ctrl+C, the cell menu's Copy) |
+| `view` | **View ▾**, the view adjustments (gridlines, headings, freeze panes, column widths and row heights, hiding rows and columns, filtering), the status bar's view-mode buttons, resizing and freeze-line drags |
+| `zoom` | The toolbar's **Fit**, −, %, +, the status bar's zoom controls, the Zoom dialog and Ctrl+wheel/pinch zoom |
+| `options` | File › Options (also turns off `theme` and `language`) |
+| `theme` | The display theme picker in Options |
+| `language` | The interface language picker in Options |
+
+A File page whose feature is off is left out of (or greyed in) the File page's list, and the
+File page opens on the first page still on; with every page off it doesn't open. Programmatic
+opens are not features: files named on the command line, `?url=`, `gridcraft:open` from a host
+page and the control channel still open workbooks with `open` hidden.
+
+GridCraft has no grammar checking and no background spell checking. Its Spelling dialog (F7) is
+part of the editor and is already absent from the viewer, so there is no `spelling` feature
+(the name is reported as unknown). On macOS the native menu bar's items stay listed, but hidden
+or disabled features don't run from them.
 
 ## What is removed or turned off
 
