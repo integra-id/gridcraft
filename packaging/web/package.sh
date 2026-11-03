@@ -32,6 +32,8 @@ WORK="$CARGO_TARGET_DIR/web-package"
 rm -rf "$WORK"
 mkdir -p "$WORK/$NAME"
 cp -R "$SITE/." "$WORK/$NAME/"
+# trunk leaves an empty lock file in the dist dir; it is not part of the site.
+rm -f "$WORK/$NAME/.trunk-lock"
 # Sample server configs (MIME type, caching, compression); harmless where unused.
 cp "$HERE/_headers" "$HERE/.htaccess" "$WORK/$NAME/"
 cp "$HERE/README.md" "$WORK/$NAME/HOSTING.md"
