@@ -927,7 +927,8 @@ impl Dialog {
                 d
             }
             "find" => {
-                let mut d = Dialog::custom("find", "Find and Replace", json!({"what": "", "with": "", "within": "sheet", "lookIn": "formulas"}));
+                let title = if app.is_viewer() { "Find" } else { "Find and Replace" };
+                let mut d = Dialog::custom("find", title, json!({"what": "", "with": "", "within": "sheet", "lookIn": "formulas"}));
                 d.tab = if p("replace").as_bool() == Some(true) { "Replace".into() } else { "Find".into() };
                 d
             }
