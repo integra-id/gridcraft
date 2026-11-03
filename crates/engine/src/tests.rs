@@ -2983,7 +2983,15 @@ fn every_command_survives_empty_params() {
     for spec in crate::command_specs() {
         if matches!(
             spec.id,
-            "file.close" | "window.close" | "file.open" | "file.save" | "file.saveAs" | "file.exportCsv" | "file.exportHtml" | "insert.picture"
+            "file.close"
+                | "window.close"
+                | "file.open"
+                | "file.save"
+                | "file.saveAs"
+                | "file.saveCopy"
+                | "file.exportCsv"
+                | "file.exportHtml"
+                | "insert.picture"
         ) {
             continue;
         }
@@ -5358,6 +5366,7 @@ mod python_cells;
 mod python_commands;
 mod python_files;
 mod seams;
+mod viewer;
 
 #[test]
 fn a_saved_workbook_keeps_its_values_until_an_edit_reaches_them() {

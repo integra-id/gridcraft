@@ -25,6 +25,7 @@ pub mod record;
 pub mod sample;
 pub mod selection;
 pub mod tables;
+pub mod viewer;
 pub mod windows;
 
 use std::sync::Arc;
@@ -528,6 +529,8 @@ pub struct Session {
     /// Measures cell text for AutoFit Column Width. Without it (CLI, MCP) AutoFit uses
     /// [`cmd::format::approx_text_width`].
     pub text_width: Option<TextWidth>,
+    /// Viewer mode ([`viewer`]): every command that edits a workbook is refused.
+    pub viewer: bool,
 }
 
 impl Session {
@@ -664,7 +667,32 @@ impl Session {
     /// Runs a command by id. Undoable commands record a history step when the workbook changed,
     /// unless an undo group is open on the document (the group then makes the step).
     /// Panics inside commands are caught and reported; the workbook is restored.
+    ///
+    /// In viewer mode ([`Session::viewer`]) commands that edit are refused, and a workbook that
+    /// was clean stays clean: what the viewer runs (recalculation, zoom) changes no content, and
+    /// zoom's undo step is dropped (there is no Undo in a viewer).
     pub fn execute(&mut self, id: &str, params: Json) -> Result<Json> {
+        if !self.viewer {
+            return self.execute_command(id, params);
+        }
+        let spec = find_command(id).ok_or_else(|| EngineError::UnknownCommand(id.to_string()))?;
+        if viewer::refuses(spec) {
+            return Err(EngineError::Disabled(id.to_string(), viewer::REASON.to_string()));
+        }
+        let before: Vec<(u64, bool, usize)> = self.docs.iter().map(|d| (d.uid, d.is_dirty(), d.undo.len())).collect();
+        let result = self.execute_command(id, params);
+        for d in &mut self.docs {
+            if let Some(&(_, dirty, undo)) = before.iter().find(|b| b.0 == d.uid) {
+                d.undo.truncate(undo);
+                if !dirty && d.is_dirty() {
+                    d.saved = d.wb.clone();
+                }
+            }
+        }
+        result
+    }
+
+    fn execute_command(&mut self, id: &str, params: Json) -> Result<Json> {
         let spec = find_command(id).ok_or_else(|| EngineError::UnknownCommand(id.to_string()))?;
         if let Err(why) = (spec.enabled)(self) {
             return Err(EngineError::Disabled(id.to_string(), why));

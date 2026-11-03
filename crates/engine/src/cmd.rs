@@ -88,7 +88,7 @@ impl CommandInfo {
 
 impl CommandSpec {
     pub fn info(&self, s: &Session) -> CommandInfo {
-        let e = (self.enabled)(s);
+        let e = if s.viewer && crate::viewer::refuses(self) { Err(crate::viewer::REASON.to_string()) } else { (self.enabled)(s) };
         CommandInfo {
             id: self.id,
             label: self.label,

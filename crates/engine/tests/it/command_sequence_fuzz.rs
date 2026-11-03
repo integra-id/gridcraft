@@ -54,6 +54,7 @@ const EXCLUDED: &[(&str, &str)] = &[
     ("file.close", "closes the document under test"),
     ("file.save", "writes files"),
     ("file.saveAs", "writes files"),
+    ("file.saveCopy", "writes files"),
     ("file.exportCsv", "writes files"),
     ("file.exportHtml", "writes files"),
     ("file.exportPdf", "renders a PDF: slow, and may write files"),

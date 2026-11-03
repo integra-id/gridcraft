@@ -11,6 +11,7 @@ pub fn specs() -> Vec<CommandSpec> {
         cmd!(noundo "file.open", "Open…", ["File"], Some("Cmd+O"), "{path} | {name, base64}, plus {password} for a password-protected workbook and {csvAsText?: bool} to keep every csv/tsv/txt field as text, with no number or date conversion (xlsx, xlsm, xls import, xlsb and ods data import, csv, tsv, txt, json)", always, open),
         cmd!(noundo "file.save", "Save", ["File"], Some("Cmd+S"), "{path?} (xlsx by default; .csv/.tsv/.json/.html/.pdf by extension)", has_doc, save),
         cmd!(noundo "file.saveAs", "Save As…", ["File"], Some("Cmd+Shift+S"), "{path} (.xlsx, .csv, .tsv, .json, .html, or .pdf: a PDF of the active sheet)", has_doc, save_as),
+        cmd!(noundo "file.saveCopy", "Save a Copy…", ["File"], None, "{path} → {path, bytes}: writes a copy (.xlsx by default; .csv/.tsv/.json/.html/.pdf by extension) and keeps the workbook's own file, title and unsaved changes; not the workbook's own file", has_doc, save_copy),
         cmd!(query "file.saveBytes", "Encode Workbook", [], None, "{format?: xlsx|csv|tsv|json|html} → {base64}", has_doc, save_bytes),
         cmd!(noundo "file.close", "Close", ["File"], Some("Cmd+W"), "{force?: bool, document?: bool} (closes the active window, or with `document` the workbook and all its windows; the workbook closes with its last window)", has_doc, close),
         cmd!(noundo "file.exportCsv", "Export as CSV", ["File", "Export"], None, "{path, sheet?, values?: bool} → {path, bytes}: writes the cells as displayed, like Excel's Save As CSV; `values: true` writes raw values instead (full-precision numbers, ISO 8601 dates and times, TRUE/FALSE)", has_doc, |s, p| export(s, p, "csv")),
@@ -151,6 +152,25 @@ fn save_as(s: &mut Session, p: &Json) -> Result<Json> {
         return ok();
     }
     save(s, p)
+}
+
+/// Save a Copy writes the workbook to another file and leaves the document as it was: its own
+/// file, its title and its unsaved changes stay. It never writes over the workbook's own file,
+/// so it is the viewer's way to save (`viewer`).
+fn save_copy(s: &mut Session, p: &Json) -> Result<Json> {
+    let path = str_param(p, "path").filter(|x| !x.trim().is_empty()).ok_or_else(|| bad("file.saveCopy", "missing `path`"))?.to_string();
+    let d = s.doc()?;
+    if d.path.as_deref().is_some_and(|own| std::path::Path::new(own) == std::path::Path::new(&path)) {
+        return Err(bad("file.saveCopy", "a copy can't replace the workbook's own file"));
+    }
+    if std::path::Path::new(&path).extension().and_then(std::ffi::OsStr::to_str).is_some_and(|e| e.eq_ignore_ascii_case("pdf")) {
+        return super::print::export_pdf(s, &json!({"path": path}));
+    }
+    let rebased = crate::io::source_dir(&path).and_then(|f| gridcraft_xlsx::rebase_links(&d.wb, &f));
+    let wb = rebased.as_ref().unwrap_or(&d.wb);
+    let bytes = crate::io::save_bytes(wb, &path)?;
+    crate::io::write_file(&path, &bytes)?;
+    Ok(json!({"path": path, "bytes": bytes.len()}))
 }
 
 fn save_bytes(s: &mut Session, p: &Json) -> Result<Json> {
