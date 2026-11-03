@@ -50,14 +50,14 @@ pub fn start() {
                     let mut session = Session::new();
                     // In host mode the parent sends the workbook to edit; no sample meanwhile.
                     let q = if app_bridge.is_some() { String::new() } else { query() };
-                    if let Some(name) = q.split(['?', '&']).find_map(|kv| kv.strip_prefix("sample=")) {
-                        let _ = session.execute("file.new", serde_json::json!({"sample": name}));
-                    } else if q.contains("sample") {
-                        let _ = session.execute("file.new", serde_json::json!({"sample": "sales"}));
-                    }
-                    // GridCraft Viewer: after the sample (`file.new` is an editing command), so the
-                    // engine refuses every command that edits from here on.
+                    // GridCraft Viewer: the engine refuses every command that edits. `file.new` is one,
+                    // so the sample opens without it.
                     session.viewer = true;
+                    if let Some(name) = q.split(['?', '&']).find_map(|kv| kv.strip_prefix("sample=")) {
+                        let _ = gridcraft_engine::sample::open(&mut session, name);
+                    } else if q.contains("sample") {
+                        let _ = gridcraft_engine::sample::open(&mut session, "sales");
+                    }
                     let mut services = services(inbox.clone(), cc.egui_ctx.clone());
                     if let Some(bridge) = &app_bridge {
                         bridge.connect(&mut services, inbox.clone(), cc.egui_ctx.clone());

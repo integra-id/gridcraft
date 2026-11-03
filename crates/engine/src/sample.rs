@@ -14,8 +14,43 @@ pub fn title(name: &str) -> String {
     SAMPLES.iter().find(|(n, _)| *n == name).map(|(_, t)| t.to_string()).unwrap_or_else(|| "Sample".into())
 }
 
-/// Builds a sample by replaying commands (so samples also exercise the command layer).
+/// Builds a sample by replaying commands (so samples also exercise the command layer). A build
+/// without the editing feature ([`crate::viewer::EDITING_BUILD`]) has no editing commands to
+/// replay, so it reads the sample's stored copy instead (`samples/<name>.json`, which the test
+/// `stored_samples_match_the_replay` keeps equal to the replay).
 pub fn build(name: &str) -> Option<Workbook> {
+    if !crate::viewer::EDITING_BUILD {
+        return stored(name);
+    }
+    replay(name)
+}
+
+/// Opens a sample as a new, unmodified workbook and makes it active; `None` for an unknown name.
+/// What `file.new {sample}` does, for a build without the editing feature too (where `file.new`
+/// refuses, as in viewer mode).
+pub fn open(s: &mut Session, name: &str) -> Option<usize> {
+    let wb = build(name)?;
+    Some(s.add_document(DocState::new(wb, None, title(name), crate::Trust::Local)))
+}
+
+/// The stored copy of a sample, read as a GridCraft JSON workbook is (`io`), without the row
+/// fitting an opened file gets: the copy is the replay's workbook as it was.
+fn stored(name: &str) -> Option<Workbook> {
+    let bytes: &[u8] = match name {
+        "budget" => include_bytes!("../samples/budget.json"),
+        "sales" => include_bytes!("../samples/sales.json"),
+        "grades" => include_bytes!("../samples/grades.json"),
+        _ => return None,
+    };
+    let mut wb: Workbook = serde_json::from_slice(bytes).ok()?;
+    wb.styles.rebuild_index();
+    for sh in &mut wb.sheets {
+        Arc::make_mut(sh).cells.rebuild();
+    }
+    Some(wb)
+}
+
+fn replay(name: &str) -> Option<Workbook> {
     let mut s = Session::new();
     let mut wb = Workbook::new();
     if let Some(sh) = wb.sheet_mut(0) {
@@ -210,4 +245,28 @@ fn grades(s: &mut Session) -> bool {
 /// A blank sheet (for callers that need one without a session).
 pub fn blank_sheet(name: &str) -> Sheet {
     Sheet::new(name)
+}
+
+#[cfg(test)]
+#[cfg(feature = "editing")]
+mod tests {
+    /// The stored samples a build without the editing feature opens are the replayed ones. With
+    /// `GRIDCRAFT_BLESS_SAMPLES=1` the test rewrites them from the replay first.
+    #[test]
+    fn stored_samples_match_the_replay() {
+        for (name, _) in super::SAMPLES {
+            let replayed = super::replay(name).expect("the sample replays");
+            if std::env::var_os("GRIDCRAFT_BLESS_SAMPLES").is_some() {
+                let path = format!("{}/samples/{name}.json", env!("CARGO_MANIFEST_DIR"));
+                std::fs::write(&path, serde_json::to_vec(&replayed).expect("serializes")).expect("writes");
+                continue;
+            }
+            let stored = super::stored(name).expect("the stored sample reads");
+            assert_eq!(
+                serde_json::to_value(&stored).expect("serializes"),
+                serde_json::to_value(&replayed).expect("serializes"),
+                "samples/{name}.json is out of date: run the test with GRIDCRAFT_BLESS_SAMPLES=1"
+            );
+        }
+    }
 }

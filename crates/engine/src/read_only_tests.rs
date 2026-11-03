@@ -55,3 +55,22 @@ fn reading_commands_still_run() {
     let d = s.doc().unwrap();
     assert!(!d.is_dirty() && d.undo.is_empty(), "viewing leaves the workbook clean");
 }
+
+#[test]
+fn samples_open_from_their_stored_copies() {
+    let mut s = Session::new();
+    for (name, title) in crate::sample::SAMPLES {
+        let i = crate::sample::open(&mut s, name).unwrap_or_else(|| panic!("{name} opens"));
+        let d = s.doc().unwrap();
+        assert_eq!(s.active_index(), i);
+        assert_eq!(d.display_title(), *title);
+        assert!(!d.is_dirty() && d.undo.is_empty(), "{name}");
+    }
+    assert!(crate::sample::open(&mut s, "nope").is_none());
+    // The sales sample's totals are formulas with their values.
+    crate::sample::open(&mut s, "sales").unwrap();
+    let d = s.doc().unwrap();
+    let sh = d.wb.active().unwrap();
+    assert_eq!(sh.name, "Sales");
+    assert!(matches!(sh.value(CellRef::parse("G5").unwrap()), Value::Number(n) if n > 0.0), "{:?}", sh.value(CellRef::parse("G5").unwrap()));
+}
