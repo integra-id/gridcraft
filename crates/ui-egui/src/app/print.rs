@@ -41,6 +41,9 @@ impl SheetApp {
     /// browser. Rendering errors use the usual alert; asynchronous spooler errors stay visible
     /// on the Print page. The engine command still returns PDF bytes without submitting.
     pub fn print_now(&mut self, params: Json) {
+        if !self.feature_allowed(crate::Feature::Print) {
+            return;
+        }
         if let Err(error) = self.submit_print(params) {
             self.alert(error);
         }

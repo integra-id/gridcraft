@@ -203,6 +203,12 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
             ) {
                 app.grid.drag = Drag::None;
             }
+            // Resizing and moving the freeze lines are the View feature (`features`).
+            if matches!(app.grid.drag, Drag::ResizeCol { .. } | Drag::ResizeRow { .. } | Drag::Freeze { .. })
+                && !app.feature_allowed(crate::Feature::View)
+            {
+                app.grid.drag = Drag::None;
+            }
             app.grid.list_picker = None;
         }
         return;

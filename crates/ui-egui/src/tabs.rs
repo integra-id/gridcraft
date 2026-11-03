@@ -389,48 +389,59 @@ pub fn status_bar(app: &mut SheetApp, ui: &mut Ui) {
                     }
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    // Zoom percentage and slider.
-                    let zoom = app.session.active().and_then(|d| d.wb.active().map(|s| s.zoom)).unwrap_or(100);
-                    let zl = ui.add(
-                        egui::Label::new(egui::RichText::new(format!("{zoom}%")).font(theme::ui_font(12.5)).color(t.text_dim)).sense(Sense::click()),
-                    );
-                    if zl.clicked() {
-                        app.open_dialog("zoom", json!({}));
+                    // Zoom percentage and slider, and the view modes: the embedder may hide or
+                    // disable them (`features`).
+                    let f = app.features;
+                    if f.visible(crate::Feature::Zoom) {
+                        ui.add_enabled_ui(f.allows(crate::Feature::Zoom), |ui| {
+                            let zoom = app.session.active().and_then(|d| d.wb.active().map(|s| s.zoom)).unwrap_or(100);
+                            let zl = ui.add(
+                                egui::Label::new(egui::RichText::new(format!("{zoom}%")).font(theme::ui_font(12.5)).color(t.text_dim))
+                                    .sense(Sense::click()),
+                            );
+                            if zl.clicked() {
+                                app.open_dialog("zoom", json!({}));
+                            }
+                            ui.add_space(4.0);
+                            if crate::widgets::icon_button(ui, Icon::Plus, t.text_dim, "Zoom In", vec2(18.0, 18.0)).clicked() {
+                                let z = ((zoom as f32 / 10.0).floor() * 10.0 + 10.0).min(400.0);
+                                app.run_or_alert("view.zoom", json!({"percent": z}));
+                            }
+                            let mut z = zoom as f32;
+                            let slider = ui.add(egui::Slider::new(&mut z, 10.0..=400.0).show_value(false).logarithmic(true));
+                            ui.ctx().accesskit_node_builder(slider.id, |node| node.set_label(app.ui.language.tr("Zoom")));
+                            if slider.changed() {
+                                let from = crate::grid::Trace::key(app);
+                                let _ = app.session.run("view.zoom", json!({"percent": z.round()}));
+                                crate::grid::Trace::keep_through_zoom(app, from);
+                            }
+                            if crate::widgets::icon_button(ui, Icon::Minus, t.text_dim, "Zoom Out", vec2(18.0, 18.0)).clicked() {
+                                let z = ((zoom as f32 / 10.0).ceil() * 10.0 - 10.0).max(10.0);
+                                app.run_or_alert("view.zoom", json!({"percent": z}));
+                            }
+                        });
                     }
-                    ui.add_space(4.0);
-                    if crate::widgets::icon_button(ui, Icon::Plus, t.text_dim, "Zoom In", vec2(18.0, 18.0)).clicked() {
-                        let z = ((zoom as f32 / 10.0).floor() * 10.0 + 10.0).min(400.0);
-                        app.run_or_alert("view.zoom", json!({"percent": z}));
-                    }
-                    let mut z = zoom as f32;
-                    let slider = ui.add(egui::Slider::new(&mut z, 10.0..=400.0).show_value(false).logarithmic(true));
-                    ui.ctx().accesskit_node_builder(slider.id, |node| node.set_label(app.ui.language.tr("Zoom")));
-                    if slider.changed() {
-                        let from = crate::grid::Trace::key(app);
-                        let _ = app.session.run("view.zoom", json!({"percent": z.round()}));
-                        crate::grid::Trace::keep_through_zoom(app, from);
-                    }
-                    if crate::widgets::icon_button(ui, Icon::Minus, t.text_dim, "Zoom Out", vec2(18.0, 18.0)).clicked() {
-                        let z = ((zoom as f32 / 10.0).ceil() * 10.0 - 10.0).max(10.0);
-                        app.run_or_alert("view.zoom", json!({"percent": z}));
-                    }
-                    ui.add_space(10.0);
-                    for (icon, tip, mode, cmd) in [
-                        (Icon::PageBreak, "Page Break Preview", "pageBreakPreview", "view.pageBreakPreview"),
-                        (Icon::PageLayout, "Page Layout", "pageLayout", "view.pageLayout"),
-                        (Icon::Normal, "Normal", "normal", "view.normal"),
-                    ] {
-                        let (r, resp) = ui.allocate_exact_size(vec2(26.0, 20.0), Sense::click());
-                        let cur = app.session.active().and_then(|d| d.wb.active().map(|s| s.view.as_str())).unwrap_or("normal");
-                        if cur == mode {
-                            ui.painter().rect_filled(r, 3.0, t.pressed);
-                        } else if resp.hovered() {
-                            ui.painter().rect_filled(r, 3.0, t.hover);
-                        }
-                        icons::paint(ui.painter(), Rect::from_center_size(r.center(), vec2(14.0, 14.0)), icon, t.text_dim);
-                        if resp.on_hover_text(tip).clicked() {
-                            app.run_or_alert(cmd, json!({}));
-                        }
+                    if f.visible(crate::Feature::View) {
+                        ui.add_enabled_ui(f.allows(crate::Feature::View), |ui| {
+                            ui.add_space(10.0);
+                            for (icon, tip, mode, cmd) in [
+                                (Icon::PageBreak, "Page Break Preview", "pageBreakPreview", "view.pageBreakPreview"),
+                                (Icon::PageLayout, "Page Layout", "pageLayout", "view.pageLayout"),
+                                (Icon::Normal, "Normal", "normal", "view.normal"),
+                            ] {
+                                let (r, resp) = ui.allocate_exact_size(vec2(26.0, 20.0), Sense::click());
+                                let cur = app.session.active().and_then(|d| d.wb.active().map(|s| s.view.as_str())).unwrap_or("normal");
+                                if cur == mode {
+                                    ui.painter().rect_filled(r, 3.0, t.pressed);
+                                } else if resp.hovered() {
+                                    ui.painter().rect_filled(r, 3.0, t.hover);
+                                }
+                                icons::paint(ui.painter(), Rect::from_center_size(r.center(), vec2(14.0, 14.0)), icon, t.text_dim);
+                                if resp.on_hover_text(tip).clicked() {
+                                    app.run_or_alert(cmd, json!({}));
+                                }
+                            }
+                        });
                     }
                     ui.add_space(16.0);
                     // The layout runs right to left, so the last statistic is drawn first.

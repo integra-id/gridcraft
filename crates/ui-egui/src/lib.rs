@@ -29,6 +29,7 @@ pub mod dnd;
 pub mod doc_windows;
 pub mod editor;
 pub mod equation;
+pub mod features;
 mod floating_pictures;
 pub mod fonts;
 pub mod formula_bar;
@@ -75,6 +76,7 @@ mod services;
 mod state;
 
 pub use clock::{monotonic_ms, now_ms};
+pub use features::{Feature, Features, Show};
 pub use services::{Chrome, Inbox, Services};
 pub use state::{NoticeKind, OpenWindow, SaveAnswer, SheetView};
 pub mod desktop_theme;
@@ -208,6 +210,8 @@ pub struct SheetApp {
     pub ui: UiState,
     /// The window chrome to draw (see [`Chrome`]).
     pub chrome: Chrome,
+    /// The features an embedder hid or disabled (see [`Features`]); all shown by default.
+    pub features: Features,
     /// Scroll position per (window id, sheet index).
     pub views: HashMap<(u64, usize), SheetView>,
     pub editor: Option<editor::EditState>,

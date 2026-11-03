@@ -36,6 +36,7 @@ impl SheetApp {
             session,
             ui: UiState::default(),
             chrome: Chrome::default(),
+            features: crate::Features::default(),
             views: HashMap::new(),
             editor: None,
             text_box_editor: None,
@@ -215,7 +216,7 @@ impl SheetApp {
         updates_ui::show(self, &ctx);
         let t = theme::Tokens::get(&ctx);
         // A host can turn the File tab off while Backstage is already open: close it.
-        if !self.chrome.file_tab {
+        if !self.chrome.file_tab || !self.features.allows(crate::Feature::File) {
             self.backstage = None;
         }
         // Keytips opened the File view (Alt, F): its letters keep working there. The viewer has no

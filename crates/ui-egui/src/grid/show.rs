@@ -57,7 +57,8 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     // Scrolling.
     let (scroll_delta, zoom_delta, modifiers, now) = ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta(), i.modifiers, i.time));
     if (resp.hovered() || resp.contains_pointer()) && !crate::text_box::contains_pointer(app, ui.ctx()) {
-        if zoom_delta != 1.0 {
+        // Ctrl+wheel and pinch zoom are the Zoom feature (`features`), which an embedder may turn off.
+        if zoom_delta != 1.0 && app.features.allows(crate::Feature::Zoom) {
             // egui's zoom factor is e^(speed × points); one notch is `line_scroll_speed` points.
             let notch = ui.ctx().options(|o| o.input_options.scroll_zoom_speed * o.input_options.line_scroll_speed);
             let turned = zoom_delta.ln() / notch;

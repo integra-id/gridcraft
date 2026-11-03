@@ -192,8 +192,11 @@ impl DocWindows {
                 let dropped: Vec<String> = ui
                     .ctx()
                     .input(|i| i.raw.dropped_files.iter().filter_map(|f| f.path().to_str().map(str::to_string)).filter(|p| !p.is_empty()).collect());
-                for path in dropped {
-                    app.open_path(&path);
+                // Unless the embedder turned dropping files off (`features`).
+                if !dropped.is_empty() && app.feature_allowed(crate::Feature::Drop) {
+                    for path in dropped {
+                        app.open_path(&path);
+                    }
                 }
                 app.ui(ui);
                 if app.session.active_window() != Some(*w) {

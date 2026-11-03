@@ -161,8 +161,12 @@ struct Outcome {
 /// Draws the Backstage view in place of the ribbon, formula bar, grid and sheet tabs.
 pub fn show(app: &mut SheetApp, ui: &mut Ui) {
     let Some(mut bs) = app.backstage.take() else { return };
-    if !crate::viewer::shows_backstage_page(app, bs.page) {
-        bs.page = crate::viewer::BACKSTAGE_START;
+    if !crate::viewer::opens_backstage_page(app, bs.page) {
+        let start =
+            if crate::viewer::opens_backstage_page(app, crate::viewer::BACKSTAGE_START) { Some(crate::viewer::BACKSTAGE_START) } else { None };
+        // The embedder may have turned every page off (`features`): no File page then.
+        let Some(page) = start.or_else(|| crate::viewer::backstage_page(app, bs.page)) else { return };
+        bs.page = page;
     }
     let ctx = ui.ctx().clone();
     // Esc inside a text field leaves the field; it closes the view only from outside one.
@@ -184,7 +188,8 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
             ui.add_space(10.0);
             let viewer = app.is_viewer();
             for page in [Page::Home, Page::New, Page::Open].into_iter().filter(|p| crate::viewer::shows_backstage_page(app, *p)) {
-                if nav_item(ui, page.icon(), lang.tr(page.label()), bs.page == page, nav_text, nav_sel).clicked() {
+                let on = crate::viewer::opens_backstage_page(app, page);
+                if ui.add_enabled_ui(on, |ui| nav_item(ui, page.icon(), lang.tr(page.label()), bs.page == page, nav_text, nav_sel)).inner.clicked() {
                     out.page = Some(page);
                 }
             }
@@ -196,7 +201,8 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                 save(app, &mut out);
             }
             for page in [Page::SaveAs, Page::Print, Page::Export].into_iter().filter(|p| crate::viewer::shows_backstage_page(app, *p)) {
-                if nav_item(ui, page.icon(), lang.tr(page.label()), bs.page == page, nav_text, nav_sel).clicked() {
+                let on = crate::viewer::opens_backstage_page(app, page);
+                if ui.add_enabled_ui(on, |ui| nav_item(ui, page.icon(), lang.tr(page.label()), bs.page == page, nav_text, nav_sel)).inner.clicked() {
                     out.page = Some(page);
                 }
             }
@@ -210,7 +216,12 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
             // Bottom up: Account sits just above Options, as in Excel.
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
                 for page in [Page::Options, Page::Account].into_iter().filter(|p| crate::viewer::shows_backstage_page(app, *p)) {
-                    if nav_item(ui, page.icon(), lang.tr(page.label()), bs.page == page, nav_text, nav_sel).clicked() {
+                    let on = crate::viewer::opens_backstage_page(app, page);
+                    if ui
+                        .add_enabled_ui(on, |ui| nav_item(ui, page.icon(), lang.tr(page.label()), bs.page == page, nav_text, nav_sel))
+                        .inner
+                        .clicked()
+                    {
                         out.page = Some(page);
                     }
                 }
@@ -584,19 +595,32 @@ fn new_page(app: &mut SheetApp, ui: &mut Ui, out: &mut Outcome) {
 
 fn open_page(app: &mut SheetApp, ui: &mut Ui, bs: &mut Backstage, out: &mut Outcome) {
     let lang = app.ui.language;
-    if square_button(ui, Icon::OpenFolder, lang.tr("Browse…")).clicked() {
-        let before = app.session.active().map(|d| d.uid);
-        app.open_dialog("open", json!({}));
-        // Desktop pickers return at once; the web picker delivers later (see `SheetApp::logic`).
-        if app.session.active().map(|d| d.uid) != before {
-            out.close = true;
-        }
+    // Browse and Recent are opening a file; the embedder may hide or disable it (`features`).
+    let open = app.features.show(crate::Feature::Open);
+    if open != crate::Show::Hidden {
+        ui.add_enabled_ui(open == crate::Show::Shown, |ui| {
+            if square_button(ui, Icon::OpenFolder, lang.tr("Browse…")).clicked() {
+                let before = app.session.active().map(|d| d.uid);
+                app.open_dialog("open", json!({}));
+                // Desktop pickers return at once; the web picker delivers later (see `SheetApp::logic`).
+                if app.session.active().map(|d| d.uid) != before {
+                    out.close = true;
+                }
+            }
+            ui.add_space(22.0);
+            section(ui, lang, "Recent");
+            recent_list(app, ui, bs, out, usize::MAX);
+        });
     }
-    ui.add_space(22.0);
-    section(ui, lang, "Recent");
-    recent_list(app, ui, bs, out, usize::MAX);
     // The viewer has no New page: its samples open from here.
-    if app.is_viewer() {
+    let samples = app.features.show(crate::Feature::Samples);
+    if app.is_viewer() && samples == crate::Show::Disabled {
+        ui.add_space(22.0);
+        ui.add_enabled_ui(false, |ui| {
+            section(ui, lang, "Samples");
+            new_tiles(app, ui, out);
+        });
+    } else if app.is_viewer() && samples == crate::Show::Shown {
         ui.add_space(22.0);
         section(ui, lang, "Samples");
         new_tiles(app, ui, out);
@@ -733,12 +757,16 @@ fn save_as(app: &mut SheetApp, ui: &mut Ui, bs: &mut Backstage, out: &mut Outcom
 
 fn export(app: &mut SheetApp, ui: &mut Ui, out: &mut Outcome) {
     let lang = app.ui.language;
-    if action_row(ui, Icon::Paper, lang.tr("Create PDF"), lang.tr("Save the sheet as a PDF document that keeps its page layout.")).clicked()
-        && export_as(app, "pdf")
-    {
-        out.close = true;
+    let pdf = app.features.show(crate::Feature::Pdf);
+    if pdf != crate::Show::Hidden {
+        let row = ui.add_enabled_ui(pdf == crate::Show::Shown, |ui| {
+            action_row(ui, Icon::Paper, lang.tr("Create PDF"), lang.tr("Save the sheet as a PDF document that keeps its page layout."))
+        });
+        if row.inner.clicked() && export_as(app, "pdf") {
+            out.close = true;
+        }
+        ui.add_space(14.0);
     }
-    ui.add_space(14.0);
     section(ui, lang, "Change File Type");
     // The viewer saves the workbook only as a copy.
     if app.is_viewer()
@@ -761,6 +789,10 @@ fn export(app: &mut SheetApp, ui: &mut Ui, out: &mut Outcome) {
 /// Exports the active workbook as `pdf`, `csv` or `html`: through the save picker on the desktop,
 /// as a browser download on the web. Returns whether a file was written or handed over.
 pub fn export_as(app: &mut SheetApp, fmt: &str) -> bool {
+    let feature = if fmt == "pdf" { crate::Feature::Pdf } else { crate::Feature::Export };
+    if !app.feature_allowed(feature) {
+        return false;
+    }
     if !app.commit_edit(0, 0, false, false) {
         return false;
     }

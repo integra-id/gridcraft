@@ -37,8 +37,24 @@ pub(super) fn options(app: &mut SheetApp, ui: &mut Ui) {
 
 /// The display theme and interface language controls of the General section.
 fn general_options(app: &mut SheetApp, ui: &mut Ui, lang: Language) {
+    // The embedder may hide or disable either picker (`features`).
+    let (theme, language) = (app.features.show(crate::Feature::Theme), app.features.show(crate::Feature::Language));
     egui::Grid::new("backstage_options_general").num_columns(2).spacing(vec2(18.0, 10.0)).show(ui, |ui| {
-        let label = ui.label(lang.tr("Display theme"));
+        if theme != crate::Show::Hidden {
+            theme_picker(app, ui, lang, theme == crate::Show::Shown);
+            ui.end_row();
+        }
+        if language != crate::Show::Hidden {
+            language_picker(app, ui, lang, language == crate::Show::Shown);
+            ui.end_row();
+        }
+    });
+}
+
+/// The display theme row: its label and picker, greyed out unless `enabled`.
+fn theme_picker(app: &mut SheetApp, ui: &mut Ui, lang: Language, enabled: bool) {
+    let label = ui.label(lang.tr("Display theme"));
+    ui.add_enabled_ui(enabled, |ui| {
         let mode = app.ui.theme_mode();
         let current = match mode {
             "system" => "System",
@@ -57,8 +73,13 @@ fn general_options(app: &mut SheetApp, ui: &mut Ui, lang: Language) {
             })
             .response
             .labelled_by(label.id);
-        ui.end_row();
-        let label = ui.label(lang.tr("Interface language"));
+    });
+}
+
+/// The interface language row: its label and picker, greyed out unless `enabled`.
+fn language_picker(app: &mut SheetApp, ui: &mut Ui, lang: Language, enabled: bool) {
+    let label = ui.label(lang.tr("Interface language"));
+    ui.add_enabled_ui(enabled, |ui| {
         craft_ui::ComboBox::from_id_salt("backstage_language")
             .width(160.0)
             .selected_text(lang.name())
@@ -71,7 +92,6 @@ fn general_options(app: &mut SheetApp, ui: &mut Ui, lang: Language) {
             })
             .response
             .labelled_by(label.id);
-        ui.end_row();
     });
 }
 

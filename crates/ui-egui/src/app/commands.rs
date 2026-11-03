@@ -109,6 +109,13 @@ impl SheetApp {
             self.toast = Some((why.to_string(), now_ms()));
             return;
         }
+        // A feature the embedder hid or disabled (`features`): its buttons, menus and shortcuts
+        // all come through here.
+        if let Some(feature) = crate::Feature::of_command(id)
+            && !self.feature_allowed(feature)
+        {
+            return;
+        }
         // A menu/shortcut opens the settings first; the Print page's button submits explicitly.
         if id == "file.print" {
             if self.services.print_native.is_some() {
@@ -331,6 +338,11 @@ impl SheetApp {
     }
 
     pub fn open_dialog(&mut self, name: &str, params: Json) {
+        if let Some(feature) = crate::Feature::of_dialog(name)
+            && !self.feature_allowed(feature)
+        {
+            return;
+        }
         if let Err(e) = self.commit_text_box_edit() {
             self.message = Some(("Text Box".into(), clean_error(&e)));
             return;
@@ -425,10 +437,12 @@ impl SheetApp {
     /// Opens the File tab's Backstage view on `page`, committing a cell still being edited first
     /// (File actions work on the whole workbook). A draft that can't be committed keeps the sheet.
     pub fn open_backstage(&mut self, page: backstage::Page) {
-        if !self.chrome.file_tab {
+        if !self.chrome.file_tab || !self.feature_allowed(crate::Feature::File) {
             return;
         }
-        let page = if crate::viewer::shows_backstage_page(self, page) { page } else { crate::viewer::BACKSTAGE_START };
+        let page = if crate::viewer::opens_backstage_page(self, page) { page } else { crate::viewer::BACKSTAGE_START };
+        // The embedder may have turned that page off too (`features`): the first one left.
+        let Some(page) = crate::viewer::backstage_page(self, page) else { return };
         if !self.commit_edit(0, 0, false, false) {
             return;
         }

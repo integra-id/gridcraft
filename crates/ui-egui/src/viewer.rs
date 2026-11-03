@@ -11,6 +11,7 @@ use egui::{Align2, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
 use serde_json::json;
 
 use crate::SheetApp;
+use crate::features::{Feature, Show};
 use crate::icons::Icon;
 use crate::theme::{self, Tokens};
 use crate::widgets::{small_button, small_button_width};
@@ -70,9 +71,38 @@ pub fn opens_dialog(app: &SheetApp, name: &str) -> bool {
     !app.is_viewer() || DIALOGS.contains(&name)
 }
 
-/// Whether the File page shows `page` in this app.
+/// How the embedder's features (`features`) show File page `page`: Open while opening or the
+/// samples are on, Print, Export and Options by their own features.
+fn page_show(app: &SheetApp, page: crate::backstage::Page) -> Show {
+    use crate::backstage::Page;
+    let f = app.features;
+    match page {
+        Page::Open => f.show(Feature::Open).min(f.show(Feature::Samples)),
+        Page::Print => f.show(Feature::Print),
+        Page::Export => f.show(Feature::Export),
+        Page::Options => f.show(Feature::Options),
+        _ => Show::Shown,
+    }
+}
+
+/// Whether the File page lists `page` in this app (greyed out when [`opens_backstage_page`] is
+/// false).
 pub fn shows_backstage_page(app: &SheetApp, page: crate::backstage::Page) -> bool {
-    !app.is_viewer() || BACKSTAGE_PAGES.contains(&page)
+    (!app.is_viewer() || BACKSTAGE_PAGES.contains(&page)) && page_show(app, page) != Show::Hidden
+}
+
+/// Whether the File page can show `page` (it is listed and not disabled).
+pub fn opens_backstage_page(app: &SheetApp, page: crate::backstage::Page) -> bool {
+    shows_backstage_page(app, page) && page_show(app, page) == Show::Shown
+}
+
+/// `page` if the File page can show it, else the first viewer page it can; `None` when the
+/// embedder turned them all off.
+pub fn backstage_page(app: &SheetApp, page: crate::backstage::Page) -> Option<crate::backstage::Page> {
+    if opens_backstage_page(app, page) {
+        return Some(page);
+    }
+    BACKSTAGE_PAGES.iter().copied().find(|p| opens_backstage_page(app, *p))
 }
 
 /// Whether the active workbook is the blank one the window keeps when nothing is open: the
@@ -162,17 +192,65 @@ pub struct BarFit {
     pub zoom_steps: bool,
 }
 
+/// Which toolbar buttons are there: an embedder may hide any of them (`features`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BarButtons {
+    pub file: bool,
+    pub open: bool,
+    pub export: bool,
+    pub print: bool,
+    pub zoom: bool,
+    pub find: bool,
+    pub view: bool,
+}
+
+impl BarButtons {
+    /// Every button.
+    pub const ALL: BarButtons = BarButtons { file: true, open: true, export: true, print: true, zoom: true, find: true, view: true };
+
+    /// The buttons `app` shows: File only with its file tab, none an embedder hid.
+    pub fn of(app: &SheetApp) -> BarButtons {
+        let f = app.features;
+        BarButtons {
+            file: app.chrome.file_tab && f.visible(Feature::File),
+            open: f.visible(Feature::Open),
+            export: f.visible(Feature::Export),
+            print: f.visible(Feature::Print),
+            zoom: f.visible(Feature::Zoom),
+            find: f.visible(Feature::Find),
+            view: f.visible(Feature::View),
+        }
+    }
+
+    /// Whether the File button has buttons after it, to keep a separator from.
+    fn file_separator(self) -> bool {
+        self.file && (self.open || self.export || self.print)
+    }
+
+    /// Whether the zoom group has Find or View after it, to keep a separator from.
+    fn zoom_separator(self) -> bool {
+        self.zoom && (self.find || self.view)
+    }
+}
+
 /// The fullest toolbar that fits `width` (inside its margins). `button(label, dropdown)` is a button's width (`""` for
-/// icon only), `pct` the zoom percentage's; `file_tab` and `has` (a workbook is open) say which
+/// icon only), `pct` the zoom percentage's; `shows` and `has` (a workbook is open) say which
 /// buttons are there.
-pub fn bar_fit(width: f32, file_tab: bool, has: bool, pct: f32, button: impl Fn(&str, bool) -> f32) -> BarFit {
+pub fn bar_fit(width: f32, shows: BarButtons, has: bool, pct: f32, button: impl Fn(&str, bool) -> f32) -> BarFit {
     let need = |fit: BarFit| {
-        let b = |label: &str, dropdown: bool| button(if fit.labels { label } else { "" }, dropdown) + 2.0;
-        let file = if file_tab { b("File", false) } else { 0.0 };
-        let left = file + SEPARATOR + b("Open", false) + b("Export", true) + b("Print", false);
-        let zoom = if fit.zoom_steps { 2.0 * b("", false) + pct + 2.0 } else { 0.0 };
+        let b = |on: bool, label: &str, dropdown: bool| if on { button(if fit.labels { label } else { "" }, dropdown) + 2.0 } else { 0.0 };
+        let sep = |on: bool| if on { SEPARATOR } else { 0.0 };
+        let left = b(shows.file, "File", false)
+            + sep(shows.file_separator())
+            + b(shows.open, "Open", false)
+            + b(shows.export, "Export", true)
+            + b(shows.print, "Print", false);
         // Fit keeps its label: its icon alone would look like Find's.
-        let right = if has { b("View", true) + b("Find", false) + SEPARATOR + zoom + button("Fit", false) + 2.0 } else { 0.0 };
+        let zoom = match (shows.zoom, fit.zoom_steps) {
+            (false, _) => 0.0,
+            (true, steps) => button("Fit", false) + 2.0 + if steps { 2.0 * b(true, "", false) + pct + 2.0 } else { 0.0 },
+        };
+        let right = if has { b(shows.view, "View", true) + b(shows.find, "Find", false) + sep(shows.zoom_separator()) + zoom } else { 0.0 };
         left + right + BAR_GAP
     };
     let fits = [BarFit { labels: true, zoom_steps: true }, BarFit { labels: false, zoom_steps: true }];
@@ -288,33 +366,66 @@ pub fn bar(app: &mut SheetApp, ui: &mut Ui) {
             let zoom = app.session.active().and_then(|d| d.wb.active().map(|s| s.zoom)).unwrap_or(100);
             let pct_text = format!("{zoom}%");
             let pct_w = ui.painter().layout_no_wrap(pct_text.clone(), theme::ui_font(12.5), t.text).size().x;
-            let fit = bar_fit(full.width(), app.chrome.file_tab, has, pct_w, |label, dropdown| small_button_width(ui, label, dropdown));
+            let shows = BarButtons::of(app);
+            let fit = bar_fit(full.width(), shows, has, pct_w, |label, dropdown| small_button_width(ui, label, dropdown));
             // Without room for labels a button shows its icon, and its tooltip names it.
             let shown = |label: &'static str| if fit.labels { label } else { "" };
+            // A button the embedder disabled (`features`) stays, greyed out.
+            let on = |app: &SheetApp, f: Feature| app.features.allows(f);
             let mut left_end = full.min.x;
             let mut right_start = full.max.x;
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
-                if app.chrome.file_tab && small_button(ui, Icon::Book, shown("File"), "File: open, print and export", false).clicked() {
+                if shows.file
+                    && ui
+                        .add_enabled_ui(on(app, Feature::File), |ui| {
+                            small_button(ui, Icon::Book, shown("File"), "File: open, print and export", false)
+                        })
+                        .inner
+                        .clicked()
+                {
                     app.open_backstage(BACKSTAGE_START);
                 }
-                separator(ui);
-                if small_button(ui, Icon::OpenFolder, shown("Open"), "Open a workbook (Ctrl+O)", false).clicked() {
+                if shows.file_separator() {
+                    separator(ui);
+                }
+                if shows.open
+                    && ui
+                        .add_enabled_ui(on(app, Feature::Open), |ui| {
+                            small_button(ui, Icon::OpenFolder, shown("Open"), "Open a workbook (Ctrl+O)", false)
+                        })
+                        .inner
+                        .clicked()
+                {
                     act(app, "file.open", json!({}));
                 }
                 ui.add_enabled_ui(has, |ui| {
-                    let menu = small_button(ui, Icon::Share, shown("Export"), "Export a copy as PDF, CSV or Excel workbook", true);
-                    egui::Popup::menu(&menu).show(|ui| {
-                        ui.set_min_width(200.0);
-                        for (fmt, label) in [("pdf", "PDF (.pdf)"), ("csv", "CSV (.csv), the active sheet"), ("xlsx", "Excel Workbook copy (.xlsx)")]
-                        {
-                            if ui.button(lang.tr(label)).clicked() {
-                                export(app, fmt);
-                                ui.close();
-                            }
-                        }
-                    });
-                    if small_button(ui, Icon::Print, shown("Print"), "Print (Ctrl+P)", false).clicked() {
+                    if shows.export {
+                        ui.add_enabled_ui(on(app, Feature::Export), |ui| {
+                            let menu = small_button(ui, Icon::Share, shown("Export"), "Export a copy as PDF, CSV or Excel workbook", true);
+                            egui::Popup::menu(&menu).show(|ui| {
+                                ui.set_min_width(200.0);
+                                for (fmt, label) in
+                                    [("pdf", "PDF (.pdf)"), ("csv", "CSV (.csv), the active sheet"), ("xlsx", "Excel Workbook copy (.xlsx)")]
+                                {
+                                    let feature = if fmt == "pdf" { Feature::Pdf } else { Feature::Export };
+                                    if !app.features.visible(feature) {
+                                        continue;
+                                    }
+                                    if ui.add_enabled(app.features.allows(feature), egui::Button::new(lang.tr(label))).clicked() {
+                                        export(app, fmt);
+                                        ui.close();
+                                    }
+                                }
+                            });
+                        });
+                    }
+                    if shows.print
+                        && ui
+                            .add_enabled_ui(on(app, Feature::Print), |ui| small_button(ui, Icon::Print, shown("Print"), "Print (Ctrl+P)", false))
+                            .inner
+                            .clicked()
+                    {
                         act(app, "file.print", json!({}));
                     }
                 });
@@ -325,33 +436,49 @@ pub fn bar(app: &mut SheetApp, ui: &mut Ui) {
                         right_start = ui.min_rect().min.x;
                         return;
                     }
-                    if small_button(ui, Icon::Zoom, "Fit", "Fit the sheet's data in the window", false).clicked()
-                        && let Some(z) = fit_zoom(app)
+                    if shows.zoom {
+                        ui.add_enabled_ui(on(app, Feature::Zoom), |ui| {
+                            if small_button(ui, Icon::Zoom, "Fit", "Fit the sheet's data in the window", false).clicked()
+                                && let Some(z) = fit_zoom(app)
+                            {
+                                act(app, "view.zoom", json!({"percent": z}));
+                            }
+                            if fit.zoom_steps {
+                                if small_button(ui, Icon::Plus, "", "Zoom In", false).clicked() {
+                                    act(app, "view.zoom", json!({"percent": zoom_step(zoom, true)}));
+                                }
+                                let pct = ui.add(
+                                    egui::Label::new(egui::RichText::new(&pct_text).font(theme::ui_font(12.5)).color(t.text))
+                                        .selectable(false)
+                                        .sense(Sense::click()),
+                                );
+                                if pct.on_hover_text(lang.tr("Zoom to 100%")).clicked() {
+                                    act(app, "view.zoom100", json!({}));
+                                }
+                                if small_button(ui, Icon::Minus, "", "Zoom Out", false).clicked() {
+                                    act(app, "view.zoom", json!({"percent": zoom_step(zoom, false)}));
+                                }
+                            }
+                        });
+                    }
+                    if shows.zoom_separator() {
+                        separator(ui);
+                    }
+                    if shows.find
+                        && ui
+                            .add_enabled_ui(on(app, Feature::Find), |ui| small_button(ui, Icon::Find, shown("Find"), "Find (Ctrl+F)", false))
+                            .inner
+                            .clicked()
                     {
-                        act(app, "view.zoom", json!({"percent": z}));
-                    }
-                    if fit.zoom_steps {
-                        if small_button(ui, Icon::Plus, "", "Zoom In", false).clicked() {
-                            act(app, "view.zoom", json!({"percent": zoom_step(zoom, true)}));
-                        }
-                        let pct = ui.add(
-                            egui::Label::new(egui::RichText::new(&pct_text).font(theme::ui_font(12.5)).color(t.text))
-                                .selectable(false)
-                                .sense(Sense::click()),
-                        );
-                        if pct.on_hover_text(lang.tr("Zoom to 100%")).clicked() {
-                            act(app, "view.zoom100", json!({}));
-                        }
-                        if small_button(ui, Icon::Minus, "", "Zoom Out", false).clicked() {
-                            act(app, "view.zoom", json!({"percent": zoom_step(zoom, false)}));
-                        }
-                    }
-                    separator(ui);
-                    if small_button(ui, Icon::Find, shown("Find"), "Find (Ctrl+F)", false).clicked() {
                         app.open_dialog("find", json!({}));
                     }
-                    let menu = small_button(ui, Icon::Gridlines, shown("View"), "View: gridlines, freeze panes, column widths, hidden rows", true);
-                    egui::Popup::menu(&menu).show(|ui| view_menu(app, ui));
+                    if shows.view {
+                        ui.add_enabled_ui(on(app, Feature::View), |ui| {
+                            let menu =
+                                small_button(ui, Icon::Gridlines, shown("View"), "View: gridlines, freeze panes, column widths, hidden rows", true);
+                            egui::Popup::menu(&menu).show(|ui| view_menu(app, ui));
+                        });
+                    }
                     right_start = ui.min_rect().min.x;
                 });
             });
@@ -396,15 +523,19 @@ pub fn empty(app: &mut SheetApp, ui: &mut Ui) {
             ui.add_space(6.0);
             ui.label(egui::RichText::new(lang.tr("Open a workbook to view it. Editing is turned off.")).font(theme::ui_font(13.5)).color(t.text_dim));
             ui.add_space(16.0);
-            let open = ui.add(
-                egui::Button::new(egui::RichText::new(lang.tr("Open a workbook…")).font(theme::ui_font(14.0)).color(t.on_accent))
-                    .fill(t.accent)
-                    .min_size(vec2(180.0, 34.0)),
-            );
-            if open.clicked() {
-                act(app, "file.open", json!({}));
+            // Without opening (`features`) the prompt has no button; the host opens the file.
+            if app.features.visible(Feature::Open) {
+                let open = ui.add_enabled(
+                    app.features.allows(Feature::Open),
+                    egui::Button::new(egui::RichText::new(lang.tr("Open a workbook…")).font(theme::ui_font(14.0)).color(t.on_accent))
+                        .fill(t.accent)
+                        .min_size(vec2(180.0, 34.0)),
+                );
+                if open.clicked() {
+                    act(app, "file.open", json!({}));
+                }
+                ui.add_space(8.0);
             }
-            ui.add_space(8.0);
             ui.label(
                 egui::RichText::new(lang.tr("Excel workbooks (.xlsx, .xlsm, .xls), OpenDocument (.ods), CSV and text files"))
                     .font(theme::ui_font(12.0))
@@ -465,12 +596,17 @@ mod tests {
 
     #[test]
     fn the_toolbar_drops_labels_then_zoom_steps_as_it_narrows() {
-        let fit = |w| bar_fit(w, true, true, 30.0, width);
+        let fit = |w| bar_fit(w, BarButtons::ALL, true, 30.0, width);
         assert_eq!(fit(1000.0), BarFit { labels: true, zoom_steps: true });
         assert_eq!(fit(400.0), BarFit { labels: false, zoom_steps: true });
         assert_eq!(fit(250.0), BarFit { labels: false, zoom_steps: false });
         // Without a workbook the right group is gone, and labels fit sooner.
-        assert_eq!(bar_fit(400.0, true, false, 30.0, width), BarFit { labels: true, zoom_steps: true });
+        assert_eq!(bar_fit(400.0, BarButtons::ALL, false, 30.0, width), BarFit { labels: true, zoom_steps: true });
+        // Buttons an embedder hid take no room.
+        let few = BarButtons { open: false, print: false, find: false, view: false, ..BarButtons::ALL };
+        assert_eq!(bar_fit(330.0, few, true, 30.0, width), BarFit { labels: true, zoom_steps: true });
+        let none = BarButtons { file: false, open: false, export: false, print: false, zoom: false, find: false, view: false };
+        assert_eq!(bar_fit(13.0, none, true, 30.0, width), BarFit { labels: true, zoom_steps: true });
         // Each step is the widest that fits.
         for w in (200..1200).step_by(10).map(|w| w as f32) {
             let got = fit(w);

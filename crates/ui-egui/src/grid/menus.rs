@@ -11,6 +11,11 @@ use super::{Arc, Drag, FillTag, RangeRef, Rect, Sense, Sheet, SheetApp, Stroke, 
 pub(super) fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_open: bool) {
     let Some((col, row, at)) = app.grid.filter_menu else { return };
     let viewer = app.is_viewer();
+    // Filtering is a view adjustment in the viewer, which the embedder may turn off (`features`).
+    if viewer && !app.feature_allowed(crate::Feature::View) {
+        app.grid.filter_menu = None;
+        return;
+    }
     let Some(d) = app.session.active() else { return };
     let wb = d.wb.clone();
     let si = wb.active_sheet();
@@ -188,7 +193,8 @@ pub(super) fn context_menu(app: &mut SheetApp, ui: &mut egui::Ui) {
                     ui.separator();
                     continue;
                 }
-                if ui.add(egui::Button::new(lang.tr(label)).frame_when_inactive(false).min_size(vec2(190.0, 20.0))).clicked() {
+                let on = item_allowed(app, id);
+                if ui.add_enabled(on, egui::Button::new(lang.tr(label)).frame_when_inactive(false).min_size(vec2(190.0, 20.0))).clicked() {
                     close = true;
                     match id {
                         "ui:pasteSpecial" => app.open_dialog("pasteSpecial", json!({})),
@@ -245,7 +251,7 @@ pub(super) fn context_menu(app: &mut SheetApp, ui: &mut egui::Ui) {
 /// The viewer's cell and header menu: see [`context_menu`].
 fn viewer_items(app: &SheetApp) -> Vec<(&'static str, &'static str)> {
     let mut items = vec![("Copy", "edit.copy"), ("Select All", "edit.selectAll"), ("-", ""), ("Find…", "ui:find"), ("Go To…", "ui:goTo"), ("-", "")];
-    let Some(d) = app.session.active() else { return items };
+    let Some(d) = app.session.active() else { return without_hidden(app, items) };
     let ranges = &d.selection.ranges;
     let (cols, rows) = (!ranges.is_empty() && ranges.iter().all(|r| r.is_full_cols()), !ranges.is_empty() && ranges.iter().all(|r| r.is_full_rows()));
     if cols && !rows {
@@ -265,7 +271,30 @@ fn viewer_items(app: &SheetApp) -> Vec<(&'static str, &'static str)> {
         ("Wrap Text", "home.wrapText"),
         if frozen { ("Unfreeze Panes", "view.unfreezePanes") } else { ("Freeze Panes", "view.freezePanes") },
     ]);
-    items
+    without_hidden(app, items)
+}
+
+/// `items` less those the embedder hid (`features`), and the separators left doubled or at an end.
+fn without_hidden(app: &SheetApp, items: Vec<(&'static str, &'static str)>) -> Vec<(&'static str, &'static str)> {
+    let mut out: Vec<(&'static str, &'static str)> = Vec::with_capacity(items.len());
+    for (label, id) in items {
+        if label == "-" {
+            if out.last().is_some_and(|(l, _)| *l != "-") {
+                out.push((label, id));
+            }
+        } else if crate::Feature::of_menu_item(id).is_none_or(|f| app.features.visible(f)) {
+            out.push((label, id));
+        }
+    }
+    if out.last().is_some_and(|(l, _)| *l == "-") {
+        out.pop();
+    }
+    out
+}
+
+/// Whether a menu item runs: not one the embedder disabled (`features`).
+fn item_allowed(app: &SheetApp, id: &str) -> bool {
+    crate::Feature::of_menu_item(id).is_none_or(|f| app.features.allows(f))
 }
 
 /// Whether the cell menu offers Show Details (Excel's right-click › Show Details): the active cell
@@ -564,7 +593,8 @@ pub(super) fn header_menu(app: &mut SheetApp, ui: &mut egui::Ui, was_open: bool)
                     ui.separator();
                     continue;
                 }
-                if ui.add(egui::Button::new(lang.tr(label)).frame_when_inactive(false).min_size(vec2(180.0, 20.0))).clicked() {
+                let on = item_allowed(app, id);
+                if ui.add_enabled(on, egui::Button::new(lang.tr(label)).frame_when_inactive(false).min_size(vec2(180.0, 20.0))).clicked() {
                     close = true;
                     match id {
                         "ui:insertPaste" => app.open_dialog("insertPaste", json!({})),
@@ -606,4 +636,24 @@ fn insert_copied_item(app: &SheetApp) -> Option<(&'static str, &'static str)> {
 pub(super) fn is_checkbox(sh: &Sheet, app: &SheetApp) -> bool {
     let Some(d) = app.session.active() else { return false };
     d.wb.styles.get(sh.style_id(d.selection.active)).num_fmt.as_str() == "checkbox"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_viewer_menu_leaves_out_hidden_items_and_greys_disabled_ones() {
+        let mut session = gridcraft_engine::Session::new();
+        session.new_workbook();
+        session.viewer = true;
+        let mut app = SheetApp::new(session, crate::Services::default());
+        let all = viewer_items(&app);
+        assert!(all.iter().any(|(_, id)| *id == "edit.copy") && all.iter().any(|(_, id)| *id == "ui:find"));
+        (app.features, _) = crate::Features::parse(Some("find,goto,view"), Some("copy"));
+        let few = viewer_items(&app);
+        let ids: Vec<&str> = few.iter().map(|(_, id)| *id).collect();
+        assert_eq!(ids, ["edit.copy", "edit.selectAll"], "hidden items and the separators around them go");
+        assert!(!item_allowed(&app, "edit.copy") && item_allowed(&app, "edit.selectAll"));
+    }
 }
