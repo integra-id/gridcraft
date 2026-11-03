@@ -1,12 +1,16 @@
-//! The viewer through real egui input: the toolbar at narrow widths.
+//! The viewer through real egui input: edits refused with the "read only" toast, Ctrl+F and the
+//! toolbar at narrow widths.
 
-use egui::{Event, Modifiers};
+use egui::{Event, Key, Modifiers};
 use egui_kittest::kittest::Queryable as _;
 use gridcraft_engine::Session;
+use gridcraft_engine::core::CellRef;
 use gridcraft_ui_egui::SheetApp;
 use serde_json::json;
 
 type Harness = egui_kittest::Harness<'static, SheetApp>;
+
+const CTRL: Modifiers = Modifiers { alt: false, ctrl: true, shift: false, mac_cmd: false, command: true };
 
 /// A workbook with A1 = 5 opened in the viewer.
 fn viewer_session() -> Session {
@@ -31,6 +35,79 @@ fn click(h: &mut Harness, at: egui::Pos2) {
         h.run_steps(2);
     }
     h.run_steps(2);
+}
+
+fn key(h: &mut Harness, k: Key, m: Modifiers) {
+    h.input_mut().events.push(Event::Key { key: k, physical_key: Some(k), pressed: true, repeat: false, modifiers: m });
+    h.input_mut().events.push(Event::Key { key: k, physical_key: Some(k), pressed: false, repeat: false, modifiers: m });
+    h.run_steps(2);
+}
+
+fn a1(h: &Harness) -> String {
+    let d = h.state().session.active().unwrap();
+    gridcraft_engine::display::edit_text(&d.wb, d.wb.active().unwrap(), CellRef::parse("A1").unwrap())
+}
+
+fn toast(h: &Harness) -> Option<&str> {
+    h.state().toast.as_ref().map(|(text, _)| text.as_str())
+}
+
+/// A way of editing the selected cell.
+type Edit = fn(&mut Harness);
+
+#[test]
+fn editing_a_cell_in_the_viewer_says_why_and_changes_nothing() {
+    let edits: [(&str, Edit); 6] = [
+        ("typing", |h| {
+            h.input_mut().events.push(Event::Text("7".into()));
+            h.run_steps(2);
+        }),
+        ("Delete", |h| key(h, Key::Delete, Modifiers::NONE)),
+        ("Backspace", |h| key(h, Key::Backspace, Modifiers::NONE)),
+        ("F2", |h| key(h, Key::F2, Modifiers::NONE)),
+        ("Ctrl+X", |h| {
+            h.input_mut().events.push(Event::Cut);
+            h.run_steps(2);
+        }),
+        ("paste", |h| {
+            h.input_mut().events.push(Event::Paste("9".into()));
+            h.run_steps(2);
+        }),
+    ];
+    for (what, edit) in edits {
+        let mut h = viewer_harness(1200.0);
+        assert_eq!(toast(&h), None, "{what}: no toast before");
+        edit(&mut h);
+        assert_eq!(toast(&h), Some(gridcraft_engine::viewer::REASON), "{what} shows the read-only toast");
+        assert_eq!(a1(&h), "5", "{what} leaves A1 as it was");
+        assert!(h.state().editor.is_none(), "{what} starts no edit");
+    }
+}
+
+#[test]
+fn moving_and_selecting_in_the_viewer_shows_no_toast() {
+    let mut h = viewer_harness(1200.0);
+    key(&mut h, Key::ArrowDown, Modifiers::NONE);
+    key(&mut h, Key::Enter, Modifiers::NONE);
+    // Shift+Space selects the row; the space it also types isn't an edit.
+    h.input_mut().events.push(Event::Key {
+        key: Key::Space,
+        physical_key: Some(Key::Space),
+        pressed: true,
+        repeat: false,
+        modifiers: Modifiers::SHIFT,
+    });
+    h.input_mut().events.push(Event::Text(" ".into()));
+    h.run_steps(2);
+    assert_eq!(toast(&h), None);
+    assert_eq!(h.state().session.active().unwrap().selection.active.a1(), "A3");
+}
+
+#[test]
+fn ctrl_f_opens_find_in_the_viewer() {
+    let mut h = viewer_harness(1200.0);
+    key(&mut h, Key::F, CTRL);
+    assert_eq!(h.state().dialog.as_ref().map(|d| d.name.as_str()), Some("find"));
 }
 
 /// The toolbar's buttons, by their accessible names (a label, or the tooltip when icon only).

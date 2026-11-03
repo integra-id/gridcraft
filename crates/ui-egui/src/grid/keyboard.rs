@@ -168,19 +168,37 @@ fn grid_events(app: &mut SheetApp, ctx: &egui::Context) -> Vec<egui::Event> {
 }
 
 /// The viewer copies but neither cuts, pastes nor types into cells: drops the events that edit,
-/// and makes Enter move (it would otherwise paste a marked range or edit).
+/// shows why with the "read only" toast, and makes Enter move (it would otherwise paste a marked
+/// range or edit).
 fn viewer_keys(app: &mut SheetApp, events: &mut Vec<egui::Event>) {
     use egui::Key;
+    // Shift+Space and Ctrl+Space select a row or column; the space they also type isn't an edit.
+    let space_chord = events.iter().any(|ev| matches!(ev, egui::Event::Key { key: Key::Space, modifiers: m, .. } if m.command || m.ctrl || m.shift));
+    let mut refused = false;
     events.retain(|ev| match ev {
-        egui::Event::Cut | egui::Event::Paste(_) | egui::Event::Text(_) => false,
+        egui::Event::Cut | egui::Event::Paste(_) => {
+            refused = true;
+            false
+        }
+        egui::Event::Text(text) => {
+            refused |= !text.is_empty() && !(space_chord && text.trim().is_empty());
+            false
+        }
         egui::Event::Key { key: Key::Enter, pressed, modifiers: m, .. } => {
             if *pressed && !m.command && !m.ctrl && !m.alt {
                 app.move_after_enter(if m.shift { -1 } else { 1 }, 0);
             }
             false
         }
-        egui::Event::Key { key: Key::F2 | Key::Delete | Key::Backspace, .. } => false,
+        egui::Event::Key { key: Key::F2 | Key::Delete | Key::Backspace, pressed, .. } => {
+            refused |= *pressed;
+            false
+        }
         egui::Event::Key { key: Key::Space, modifiers: m, .. } => m.command || m.ctrl || m.shift,
         _ => true,
     });
+    // Say why nothing happened, as a refused command does.
+    if refused {
+        app.toast = Some((gridcraft_engine::viewer::REASON.to_string(), crate::now_ms()));
+    }
 }
