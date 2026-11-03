@@ -1,4 +1,4 @@
-//! GridCraft desktop app.
+//! GridCraft desktop app, built as GridCraft Viewer (read-only workbooks).
 //!
 //! Usage: `gridcraft [--control <port> [--control-token <token>]] [--sample <name>] [files…]`
 //!
@@ -311,6 +311,9 @@ fn main() -> eframe::Result<()> {
     {
         log::warn!("sample {s}: {e}");
     }
+    // This build is GridCraft Viewer: workbooks open read-only and the engine refuses every
+    // command that edits (`gridcraft_engine::viewer`). Set after the sample, which `file.new` makes.
+    session.viewer = true;
     let mut app = SheetApp::new(session, services());
     app.watch_desktop_theme();
     app.start_update_check();
@@ -328,7 +331,7 @@ fn main() -> eframe::Result<()> {
         app.open_path(f);
     }
     let mut viewport = egui::ViewportBuilder::default()
-        .with_title("GridCraft")
+        .with_title(gridcraft_ui_egui::viewer::NAME)
         .with_inner_size([1440.0, 900.0])
         .with_min_inner_size([640.0, 420.0])
         .with_app_id("ai.storyteller.gridcraft")
