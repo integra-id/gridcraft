@@ -6,6 +6,36 @@ AddType text/javascript .js
   AddOutputFilterByType DEFLATE application/wasm text/javascript text/html
 </IfModule>
 
+# package.sh ships Brotli (.br) and gzip (.gz) copies of the wasm, js and html: send them to
+# browsers that accept them, with the original type, and don't compress them again.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTP:Accept-Encoding} br
+  RewriteCond %{REQUEST_FILENAME}.br -f
+  RewriteRule ^(.+\.(wasm|js|html))$ $1.br [L]
+  RewriteCond %{HTTP:Accept-Encoding} gzip
+  RewriteCond %{REQUEST_FILENAME}.gz -f
+  RewriteRule ^(.+\.(wasm|js|html))$ $1.gz [L]
+  RewriteRule \.(br|gz)$ - [E=no-gzip:1,E=no-brotli:1]
+</IfModule>
+<FilesMatch "\.wasm\.(br|gz)$">
+  ForceType application/wasm
+</FilesMatch>
+<FilesMatch "\.js\.(br|gz)$">
+  ForceType text/javascript
+</FilesMatch>
+<FilesMatch "\.html\.(br|gz)$">
+  ForceType text/html
+</FilesMatch>
+<FilesMatch "\.(br)$">
+  Header set Content-Encoding br
+  Header append Vary Accept-Encoding
+</FilesMatch>
+<FilesMatch "\.(gz)$">
+  Header set Content-Encoding gzip
+  Header append Vary Accept-Encoding
+</FilesMatch>
+
 <IfModule mod_headers.c>
   <FilesMatch "\.(wasm|js)$">
     Header set Cache-Control "public, max-age=31536000, immutable"

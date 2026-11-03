@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the browser version and zip it:  $DIST/gridcraft-web-<version>.zip
+# Build the browser version (GridCraft Viewer, `[profile.web]`) and zip it:  $DIST/gridcraft-web-<version>.zip
 #
 # Usage: packaging/web/package.sh [--skip-build]
 #
@@ -35,6 +35,15 @@ cp -R "$SITE/." "$WORK/$NAME/"
 # Sample server configs (MIME type, caching, compression); harmless where unused.
 cp "$HERE/_headers" "$HERE/.htaccess" "$WORK/$NAME/"
 cp "$HERE/README.md" "$WORK/$NAME/HOSTING.md"
+# Precompressed copies beside the wasm, js and html (`x.wasm.br`, `x.wasm.gz`) for hosts that
+# serve them as they are (nginx `gzip_static`/`brotli_static`, the `.htaccess` rules): Brotli at
+# quality 11 is far smaller than what a server compresses on the fly. `-n` keeps gzip output
+# reproducible.
+command -v brotli >/dev/null || echo "warning: brotli not found; packaging without .br files" >&2
+while IFS= read -r -d '' f; do
+  gzip -k9nf "$f"
+  if command -v brotli >/dev/null; then brotli -kf -q 11 "$f"; fi
+done < <(find "$WORK/$NAME" -maxdepth 1 -type f \( -name '*.wasm' -o -name '*.js' -o -name '*.html' \) -print0)
 copy_docs "$WORK/$NAME"
 rm -f "$DIST/$NAME.zip"
 (cd "$WORK" && zip -qr9 "$DIST/$NAME.zip" "$NAME")
