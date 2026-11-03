@@ -14,9 +14,10 @@ name = "gridcraft-web"
 path = "src/main.rs"
 
 [dependencies]
-gridcraft-engine = { workspace = true, features = ["editing"] }
-# Without `editor`: the browser app is GridCraft Viewer, and the editing interface it never draws
-# (ribbon, title bar, keytips) is left out of the download.
+# Without the engine's `editing` and `macros` and the interface's `editor`: the browser app is
+# GridCraft Viewer, and the editing commands, macro runtime and editing interface it never uses
+# (ribbon, title bar, keytips) are left out of the download.
+gridcraft-engine = { workspace = true }
 gridcraft-ui-egui = { workspace = true }
 egui = { workspace = true }
 log = { workspace = true }

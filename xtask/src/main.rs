@@ -22,9 +22,11 @@ const USAGE: &str = "\
 usage: cargo xtask <command>
 
 commands:
-  ci              i18n-report, fmt --check, clippy -D warnings, test, doctest, assets, layers, wasm,
-                  parity --check, keytips --check (stops at the first failure; the parity check runs
-                  only if docs/parity-checklist.md exists)
+  ci              i18n-report, fmt --check, clippy -D warnings, test, doctest, viewer-engine, assets,
+                  layers, wasm, parity --check, keytips --check (stops at the first failure; the parity
+                  check runs only if docs/parity-checklist.md exists)
+  viewer-engine   clippy -D warnings and tests of gridcraft-engine without default features, as the
+                  web viewer builds it (no editing commands, no macro runtime)
   test            workspace tests (cargo nextest when installed, else cargo test), then doctests
   assets          check that every icon/image/font/sample file is attributed in ATTRIBUTION.md
   i18n-report     list the interface strings each language doesn't translate yet (always passes)
@@ -50,6 +52,7 @@ fn main() -> ExitCode {
         Some("layers") => cmd_layers(),
         Some("wasm") => cmd_wasm(),
         Some("test") => cmd_test().and_then(|()| cmd_doctest()),
+        Some("viewer-engine") => cmd_viewer_engine(),
         Some("ci") => cmd_ci(),
         Some("stats") => stats::run(&root(), rest.contains(&"--exact")),
         Some("parity") => parity::run(&root(), &rest),
@@ -194,6 +197,18 @@ fn cmd_doctest() -> Result<(), String> {
     run(c, "cargo test --workspace --doc")
 }
 
+/// The engine as the web viewer builds it, without its default features (`editing`, `macros`):
+/// the workspace build unifies them on, so this is the only build that checks the refusal path
+/// (`read_only_tests`) and the code it leaves out.
+fn cmd_viewer_engine() -> Result<(), String> {
+    let mut c = cargo();
+    c.args(["clippy", "-p", "gridcraft-engine", "--no-default-features", "--all-targets", "--", "-D", "warnings"]);
+    run(c, "cargo clippy -p gridcraft-engine --no-default-features --all-targets -- -D warnings")?;
+    let mut c = cargo();
+    c.args(["test", "-p", "gridcraft-engine", "--no-default-features", "--lib", "--tests"]);
+    run(c, "cargo test -p gridcraft-engine --no-default-features --lib --tests")
+}
+
 fn cmd_ci() -> Result<(), String> {
     type Step = (&'static str, Box<dyn Fn() -> Result<(), String>>);
     let steps: Vec<Step> = vec![
@@ -217,6 +232,7 @@ fn cmd_ci() -> Result<(), String> {
         ),
         ("test", Box::new(cmd_test)),
         ("doctest", Box::new(cmd_doctest)),
+        ("viewer-engine", Box::new(cmd_viewer_engine)),
         ("assets", Box::new(|| assets::run(&root()))),
         ("layers", Box::new(cmd_layers)),
         ("wasm", Box::new(cmd_wasm)),

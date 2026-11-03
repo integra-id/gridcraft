@@ -74,3 +74,47 @@ fn samples_open_from_their_stored_copies() {
     assert_eq!(sh.name, "Sales");
     assert!(matches!(sh.value(CellRef::parse("G5").unwrap()), Value::Number(n) if n > 0.0), "{:?}", sh.value(CellRef::parse("G5").unwrap()));
 }
+
+#[test]
+fn a_sample_can_be_searched_navigated_and_exported() {
+    let mut s = Session::new();
+    crate::sample::open(&mut s, "sales").unwrap();
+    let found = s.execute("edit.find", json!({"what": "North", "all": true})).unwrap();
+    assert!(found["count"].as_u64().is_some_and(|n| n >= 1), "{found}");
+    s.execute("edit.goTo", json!({"reference": "G5"})).unwrap();
+    s.execute("sheet.next", json!({})).unwrap();
+    s.execute("sheet.activate", json!({"sheet": 0})).unwrap();
+    let (bytes, pages) = {
+        let r = s.execute("file.exportPdf", json!({})).unwrap();
+        (crate::io::base64_decode(r["base64"].as_str().unwrap()).unwrap(), r["pages"].as_u64().unwrap())
+    };
+    assert!(bytes.starts_with(b"%PDF") && pages >= 1);
+    s.execute("file.printPreview", json!({})).unwrap();
+    for format in ["xlsx", "csv", "html", "json"] {
+        let r = s.execute("file.saveBytes", json!({"format": format})).unwrap();
+        assert!(r["bytes"].as_u64().is_some_and(|n| n > 0), "{format}: {r}");
+    }
+    let d = s.doc().unwrap();
+    assert!(!d.is_dirty() && d.undo.is_empty(), "viewing leaves the workbook clean");
+}
+
+/// The web viewer leaves out both editing and the macro runtime, yet a copy it saves keeps the
+/// workbook's macros.
+#[test]
+fn a_saved_copy_keeps_the_workbooks_macros() {
+    let mut s = Session::new();
+    let mut wb = Workbook::new();
+    let m = crate::macros::parse_macro(
+        &json!({"name": "Fill", "description": "Puts 1 in A1", "steps": [{"command": "cell.set", "params": {"cell": "A1", "input": "1"}}]}),
+    )
+    .unwrap();
+    wb.macros.push(m);
+    s.add_document(DocState::new(wb, None, "Book".into(), Trust::Local));
+    let r = s.execute("file.saveBytes", json!({"format": "xlsx"})).unwrap();
+    s.execute("file.open", json!({"name": "Copy.xlsx", "base64": r["base64"]})).unwrap();
+    let d = s.doc().unwrap();
+    assert_eq!(d.display_title(), "Copy.xlsx");
+    let names: Vec<&str> = d.wb.macros.iter().map(|m| m.name.as_str()).collect();
+    assert_eq!(names, ["Fill"], "the reopened copy has the macro");
+    assert_eq!(d.wb.macros[0].description, "Puts 1 in A1");
+}
