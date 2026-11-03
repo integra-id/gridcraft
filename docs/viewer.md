@@ -39,8 +39,10 @@ ribbon and the formula bar:
 - In the centre: the workbook's name and a green **Read only** badge.
 - On the right: **Find**, **−**, the zoom percentage (click it for 100%), **+** and **Fit** (fits the
   sheet's used range in the window, 25–200%).
-- In a narrow window the buttons drop their labels (each keeps its icon and tooltip), then the
-  zoom steps (− % +), so the two groups never overlap (`viewer::bar_fit`).
+- In a narrow window the buttons drop their labels (each keeps its icon and tooltip; **Fit**
+  keeps its label), then the zoom steps (− % +), so the two groups never overlap
+  (`viewer::bar_fit`). The workbook's name goes before the badge does, and neither spills over
+  the buttons (`viewer::title_fit`).
 
 Below the toolbar come the notices, the grid, the sheet tabs and the status bar. With nothing
 open the window shows *GridCraft Viewer* and an **Open a workbook…** button. File › Open also

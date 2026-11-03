@@ -117,7 +117,7 @@ const BUTTONS: [(&str, &str); 6] = [
     ("Export", "Export a copy as PDF, CSV or Excel workbook"),
     ("Print", "Print (Ctrl+P)"),
     ("Find", "Find (Ctrl+F)"),
-    ("Fit", "Fit the sheet's data in the window"),
+    ("Fit", "Fit"),
 ];
 
 fn button_rect(h: &Harness, label: &str, tip: &str) -> egui::Rect {

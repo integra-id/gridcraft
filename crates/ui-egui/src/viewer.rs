@@ -155,7 +155,7 @@ fn separator(ui: &mut Ui) {
 
 /// What the viewer's toolbar has room for: its buttons' labels, and the zoom steps (−, the
 /// percentage, +). A narrow window drops the labels first (each button keeps its icon and
-/// tooltip), then the zoom steps, so the two groups of buttons never overlap.
+/// tooltip; Fit keeps its label), then the zoom steps, so the two groups of buttons never overlap.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BarFit {
     pub labels: bool,
@@ -171,11 +171,21 @@ pub fn bar_fit(width: f32, file_tab: bool, has: bool, pct: f32, button: impl Fn(
         let file = if file_tab { b("File", false) } else { 0.0 };
         let left = file + SEPARATOR + b("Open", false) + b("Export", true) + b("Print", false);
         let zoom = if fit.zoom_steps { 2.0 * b("", false) + pct + 2.0 } else { 0.0 };
-        let right = if has { b("Find", false) + SEPARATOR + zoom + b("Fit", false) } else { 0.0 };
+        // Fit keeps its label: its icon alone would look like Find's.
+        let right = if has { b("Find", false) + SEPARATOR + zoom + button("Fit", false) + 2.0 } else { 0.0 };
         left + right + BAR_GAP
     };
     let fits = [BarFit { labels: true, zoom_steps: true }, BarFit { labels: false, zoom_steps: true }];
     fits.into_iter().find(|fit| need(*fit) <= width).unwrap_or(BarFit { labels: false, zoom_steps: false })
+}
+
+/// How the workbook's name and the badge (`badge`, its width, when a workbook is open) share
+/// `room` between the toolbar's groups: the room the name gets (0 for none, below 30 px) and
+/// whether the badge shows. The badge goes before the name does; neither spills past `room`.
+pub fn title_fit(room: f32, badge: Option<f32>) -> (f32, bool) {
+    let badge_shown = badge.is_some_and(|w| w <= room);
+    let left = room - badge.filter(|_| badge_shown).map_or(0.0, |w| w + 8.0);
+    (if left >= 30.0 { left } else { 0.0 }, badge_shown)
 }
 
 /// A separator's width with the spacing after it.
@@ -248,7 +258,7 @@ pub fn bar(app: &mut SheetApp, ui: &mut Ui) {
                         right_start = ui.min_rect().min.x;
                         return;
                     }
-                    if small_button(ui, Icon::Zoom, shown("Fit"), "Fit the sheet's data in the window", false).clicked()
+                    if small_button(ui, Icon::Zoom, "Fit", "Fit the sheet's data in the window", false).clicked()
                         && let Some(z) = fit_zoom(app)
                     {
                         act(app, "view.zoom", json!({"percent": z}));
@@ -285,15 +295,17 @@ pub fn bar(app: &mut SheetApp, ui: &mut Ui) {
             let name_w = painter.layout_no_wrap(name.clone(), font.clone(), t.text).size().x;
             let badge_w = if has { painter.layout_no_wrap(badge.clone(), badge_font.clone(), t.text).size().x + 14.0 } else { 0.0 };
             let room = right_start - left_end - 24.0;
-            if room > 60.0 {
-                let total = (name_w + if has { badge_w + 8.0 } else { 0.0 }).min(room);
-                let x = ((left_end + right_start) / 2.0 - total / 2.0).max(left_end + 12.0);
+            let (name_room, badge_shown) = title_fit(room, if has { Some(badge_w) } else { None });
+            let shown_w = name_w.min(name_room) + if badge_shown { badge_w + if name_room > 0.0 { 8.0 } else { 0.0 } } else { 0.0 };
+            if shown_w > 0.0 {
+                let x = ((left_end + right_start) / 2.0 - shown_w / 2.0).max(left_end + 12.0);
                 let cy = full.center().y;
-                let name_room = (room - if has { badge_w + 8.0 } else { 0.0 }).max(20.0);
-                let clip = Rect::from_min_size(pos2(x, full.min.y), vec2(name_room, full.height()));
-                painter.with_clip_rect(clip).text(pos2(x, cy), Align2::LEFT_CENTER, &name, font, t.text);
-                if has {
-                    let bx = x + name_w.min(name_room) + 8.0;
+                if name_room > 0.0 {
+                    let clip = Rect::from_min_size(pos2(x, full.min.y), vec2(name_room, full.height()));
+                    painter.with_clip_rect(clip).text(pos2(x, cy), Align2::LEFT_CENTER, &name, font, t.text);
+                }
+                if badge_shown {
+                    let bx = x + if name_room > 0.0 { name_w.min(name_room) + 8.0 } else { 0.0 };
                     let r = Rect::from_min_size(pos2(bx, cy - 10.0), vec2(badge_w, 20.0));
                     painter.rect_filled(r, 10.0, t.accent_soft);
                     painter.rect_stroke(r, 10.0, Stroke::new(1.0, t.accent), StrokeKind::Inside);
@@ -365,6 +377,21 @@ mod tests {
         open_sample(&mut app, "nope");
         assert_eq!(app.session.documents().len(), 2);
         assert!(app.toast.as_ref().is_some_and(|(t, _)| t.contains("nope")));
+    }
+
+    #[test]
+    fn the_title_never_spills_past_its_room() {
+        assert_eq!(title_fit(300.0, Some(70.0)), (222.0, true));
+        // Too little for the name: the badge alone.
+        assert_eq!(title_fit(90.0, Some(70.0)), (0.0, true));
+        // Too little for the badge: nothing.
+        assert_eq!(title_fit(50.0, Some(70.0)), (50.0, false));
+        assert_eq!(title_fit(20.0, Some(70.0)), (0.0, false));
+        assert_eq!(title_fit(200.0, None), (200.0, false));
+        for room in (-50..400).map(|r| r as f32) {
+            let (name, badge) = title_fit(room, Some(70.0));
+            assert!(name + if badge { 70.0 + if name > 0.0 { 8.0 } else { 0.0 } } else { 0.0 } <= room.max(0.0), "{room}");
+        }
     }
 
     #[test]
