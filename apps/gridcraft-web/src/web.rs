@@ -55,6 +55,9 @@ pub fn start() {
                     } else if q.contains("sample") {
                         let _ = session.execute("file.new", serde_json::json!({"sample": "sales"}));
                     }
+                    // GridCraft Viewer: after the sample (`file.new` is an editing command), so the
+                    // engine refuses every command that edits from here on.
+                    session.viewer = true;
                     let mut services = services(inbox.clone(), cc.egui_ctx.clone());
                     if let Some(bridge) = &app_bridge {
                         bridge.connect(&mut services, inbox.clone(), cc.egui_ctx.clone());
@@ -106,7 +109,7 @@ pub fn start() {
         if let Some(el) = document.get_element_by_id(LOADING_ID) {
             match result {
                 Ok(()) => el.remove(),
-                Err(e) => el.set_inner_html(&format!("<p>GridCraft failed to start: {e:?}</p><p>A browser with WebGPU or WebGL2 is required.</p>")),
+                Err(e) => el.set_inner_html(&format!("<p>GridCraft Viewer failed to start: {e:?}</p><p>A browser with WebGPU or WebGL2 is required.</p>")),
             }
         }
     });
