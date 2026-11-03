@@ -37,7 +37,10 @@ impl UrlOpen {
     /// Starts fetching `address`; `name` is `?name=`.
     pub fn start(address: &str, name: Option<&str>, inbox: Inbox, ctx: egui::Context) -> Self {
         let resolved = resolve(address);
-        let shown = crate::url_open::initial_name(name, resolved.as_deref().unwrap_or(address));
+        let shown = match &resolved {
+            Ok(href) => crate::url_open::initial_name(name, href),
+            Err(_) => crate::url_open::unfetchable_name(name),
+        };
         let this = Self { state: Rc::new(RefCell::new(State { name: shown, phase: Phase::Fetching })), inbox: inbox.clone() };
         let href = match resolved {
             Ok(href) => href,
@@ -66,7 +69,7 @@ impl UrlOpen {
 
     fn fail(&self, error: String) {
         let mut s = self.state.borrow_mut();
-        log::error!("couldn't open {} from the address: {error}", s.name);
+        log::error!("{} (from ?url=)", crate::url_open::failure_message(&s.name, &error));
         s.phase = Phase::Failed { error, reported: false };
     }
 
@@ -78,7 +81,7 @@ impl UrlOpen {
         if let Phase::Failed { error, reported } = &mut s.phase {
             if !*reported {
                 *reported = true;
-                app.message = Some(("GridCraft Viewer".into(), format!("Couldn't open {name}: {error}")));
+                app.message = Some(("GridCraft Viewer".into(), crate::url_open::failure_message(&name, error)));
             }
         } else if matches!(s.phase, Phase::Queued) && self.inbox.lock().map(|q| q.is_empty()).unwrap_or(true) {
             s.phase = Phase::Done;

@@ -125,8 +125,9 @@ https://example.com/gridcraft/?url=https%3A%2F%2Ffiles.example.org%2Fq3.ods&name
   server need none of this.
 - **While it downloads** the sheet shows *Opening <name>…*. A bad address, a network or CORS
   failure, an HTTP error (404, 403, …), an empty file, one larger than 512 MB or one GridCraft
-  can't read shows a message box (*Couldn't open name: why*) and is logged to the console; the
-  viewer stays usable.
+  can't read shows a message box (*Couldn't open name: why*; for an address that isn't valid or
+  can't be fetched, *Couldn't open the workbook: why*, or the `?name=` given) and is logged to the
+  console; the viewer stays usable.
 - `?url=` takes precedence over `?sample`, and is ignored with `?host=parent` (the parent page
   sends the workbook then).
 

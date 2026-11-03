@@ -50,6 +50,20 @@ pub fn initial_name(name: Option<&str>, address: &str) -> String {
     name.map(file_part).filter(|n| !n.is_empty()).or_else(|| address_name(address)).unwrap_or_else(|| FALLBACK_NAME.into())
 }
 
+/// The name for an address that can't be fetched (not a valid address, or a refused scheme):
+/// only `?name=`. The address itself names nothing then, so its tail (`[::1` of `http://[::1`,
+/// `alert(1)` of `javascript:alert(1)`) is not shown as a file name.
+pub fn unfetchable_name(name: Option<&str>) -> String {
+    name.map(file_part).unwrap_or_default()
+}
+
+/// The message for a workbook that couldn't be opened: *Couldn't open <name>: <error>*, or
+/// *Couldn't open the workbook: <error>* when nothing names it.
+pub fn failure_message(name: &str, error: &str) -> String {
+    let name = name.trim();
+    if name.is_empty() { format!("Couldn't open the workbook: {error}") } else { format!("Couldn't open {name}: {error}") }
+}
+
 /// The workbook's name once the response is in: `?name=`, else the `Content-Disposition`
 /// file name, else the address's last path segment (query and fragment dropped,
 /// percent-decoded), else [`FALLBACK_NAME`]. Only a file name is kept. A name without a known
@@ -257,6 +271,16 @@ mod tests {
         assert_eq!(n("blob:https://example.com/5b1c-77aa"), "5b1c-77aa");
         assert_eq!(initial_name(None, "https://example.com/files/report.xlsx"), "report.xlsx");
         assert_eq!(initial_name(None, "https://example.com/"), FALLBACK_NAME);
+    }
+
+    #[test]
+    fn an_unfetchable_address_names_nothing() {
+        let error = "\u{201c}http://[::1\u{201d} isn't a valid address";
+        assert_eq!(unfetchable_name(None), "");
+        assert_eq!(failure_message(&unfetchable_name(None), error), format!("Couldn't open the workbook: {error}"));
+        assert_eq!(unfetchable_name(Some("../Budget.xlsx")), "Budget.xlsx");
+        assert_eq!(failure_message(&unfetchable_name(Some("Budget.xlsx")), "x"), "Couldn't open Budget.xlsx: x");
+        assert_eq!(failure_message(&initial_name(None, "/files/q3.xlsx"), "HTTP 404"), "Couldn't open q3.xlsx: HTTP 404");
     }
 
     #[test]
