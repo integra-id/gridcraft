@@ -222,16 +222,20 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                 ui.set_max_width(CONTENT_W);
                 ui.label(RichText::new(lang.tr(bs.page.label())).font(theme::ui_font(28.0)).color(t.text));
                 ui.add_space(18.0);
+                // Without the editing interface the viewer's pages are the only ones
+                // (`viewer::BACKSTAGE_PAGES`; `show` sends any other to Open), so the rest are dead
+                // code and left out of the build.
+                let editor = crate::viewer::EDITOR;
                 match bs.page {
-                    Page::Home => home(app, ui, &mut bs, &mut out),
-                    Page::New => new_page(app, ui, &mut out),
-                    Page::Open => open_page(app, ui, &mut bs, &mut out),
-                    Page::Info => info(app, ui, &mut bs),
-                    Page::SaveAs => save_as(app, ui, &mut bs, &mut out),
+                    Page::Home if editor => home(app, ui, &mut bs, &mut out),
+                    Page::New if editor => new_page(app, ui, &mut out),
+                    Page::Info if editor => info(app, ui, &mut bs),
+                    Page::SaveAs if editor => save_as(app, ui, &mut bs, &mut out),
+                    Page::Account if editor => account(app, ui),
+                    Page::Home | Page::New | Page::Info | Page::SaveAs | Page::Account | Page::Open => open_page(app, ui, &mut bs, &mut out),
                     Page::Print => print(app, ui, &mut bs, &mut out),
                     Page::Export => export(app, ui, &mut out),
                     Page::Options => options(app, ui),
-                    Page::Account => account(app, ui),
                 }
             });
         });
