@@ -57,7 +57,7 @@ type Edit = fn(&mut Harness);
 
 #[test]
 fn editing_a_cell_in_the_viewer_says_why_and_changes_nothing() {
-    let edits: [(&str, Edit); 6] = [
+    let edits: [(&str, Edit); 7] = [
         ("typing", |h| {
             h.input_mut().events.push(Event::Text("7".into()));
             h.run_steps(2);
@@ -73,6 +73,8 @@ fn editing_a_cell_in_the_viewer_says_why_and_changes_nothing() {
             h.input_mut().events.push(Event::Paste("9".into()));
             h.run_steps(2);
         }),
+        // Ctrl+V with nothing a browser lets it read: no paste event, the key alone.
+        ("Ctrl+V", |h| key(h, Key::V, CTRL)),
     ];
     for (what, edit) in edits {
         let mut h = viewer_harness(1200.0);

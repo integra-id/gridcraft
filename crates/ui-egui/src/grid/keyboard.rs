@@ -195,6 +195,12 @@ fn viewer_keys(app: &mut SheetApp, events: &mut Vec<egui::Event>) {
             false
         }
         egui::Event::Key { key: Key::Space, modifiers: m, .. } => m.command || m.ctrl || m.shift,
+        // A browser sends no paste event when the clipboard is empty or can't be read, but
+        // Ctrl+V still asked to paste.
+        egui::Event::Key { key: Key::V | Key::X, pressed: true, modifiers: m, .. } if m.command && !m.alt => {
+            refused = true;
+            true
+        }
         _ => true,
     });
     // Say why nothing happened, as a refused command does.
