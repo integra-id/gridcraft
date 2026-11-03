@@ -4,13 +4,13 @@ use super::tables::filter_table_range;
 use super::{Arc, Drag, FillTag, RangeRef, Rect, Sense, Sheet, SheetApp, Stroke, Tokens, col_to_letters, json, pos2, vec2};
 
 /// Draws the filter-header popup: sort, search/select-all, apply/clear, a lazily installed table autofilter, new-open search focus and dismissal.
+///
+/// In the viewer, filtering only hides and shows rows (a view adjustment): Sort, which moves
+/// cells, is left out, and a table's filter is installed by the first `data.filterBy` from its
+/// header cell rather than by `data.filter`.
 pub(super) fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_open: bool) {
     let Some((col, row, at)) = app.grid.filter_menu else { return };
-    // Filtering and sorting edit the sheet: the viewer has no filter menu.
-    if app.is_viewer() {
-        app.grid.filter_menu = None;
-        return;
-    }
+    let viewer = app.is_viewer();
     let Some(d) = app.session.active() else { return };
     let wb = d.wb.clone();
     let si = wb.active_sheet();
@@ -18,7 +18,12 @@ pub(super) fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_
     let _ = geo;
     // Tables get an autofilter on demand.
     let table_range = filter_table_range(sh, col, row);
-    if sh.autofilter.is_none()
+    if viewer {
+        if sh.autofilter.is_none() && table_range.is_some() {
+            // `data.filterBy` installs the table's filter around the selection.
+            let _ = app.session.run("selection.set", json!({"range": super::CellRef::new(row, col).a1()}));
+        }
+    } else if sh.autofilter.is_none()
         && let Some(r) = table_range
     {
         let _ = app.session.run("data.filter", json!({"range": r.a1()}));
@@ -50,17 +55,21 @@ pub(super) fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_
     let response = area.show(ui.ctx(), |ui| {
         egui::Frame::popup(ui.style()).show(ui, |ui| {
             ui.set_width(230.0);
-            let ascending = ui.button("↑  Sort Ascending");
-            if ascending.clicked() {
-                let _ = app.run("data.sortAscending", json!({"column": col_to_letters(col)}));
-                close = true;
+            let mut sorts = vec![];
+            if !viewer {
+                let ascending = ui.button("↑  Sort Ascending");
+                if ascending.clicked() {
+                    let _ = app.run("data.sortAscending", json!({"column": col_to_letters(col)}));
+                    close = true;
+                }
+                let descending = ui.button("↓  Sort Descending");
+                if descending.clicked() {
+                    let _ = app.run("data.sortDescending", json!({"column": col_to_letters(col)}));
+                    close = true;
+                }
+                sorts = vec![ascending.id, descending.id];
+                ui.separator();
             }
-            let descending = ui.button("↓  Sort Descending");
-            if descending.clicked() {
-                let _ = app.run("data.sortDescending", json!({"column": col_to_letters(col)}));
-                close = true;
-            }
-            ui.separator();
             ui.label(egui::RichText::new("Filter").strong());
             let mut checks: Vec<(String, bool)> = ui.ctx().data_mut(|d| d.get_temp::<Vec<(String, bool)>>(key)).unwrap_or(values.clone());
             // A search narrows the list; Select All and Apply then only cover the matches.
@@ -101,7 +110,7 @@ pub(super) fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_
                 // Nothing checked would hide every row, so Enter (unlike a click on Apply) does nothing then.
                 let any = checks.iter().any(|(_, on)| *on);
                 let apply = ui.button("Apply");
-                ui.ctx().data_mut(|d| d.insert_temp(buttons_key, vec![ascending.id, descending.id, clear.id, apply.id]));
+                ui.ctx().data_mut(|d| d.insert_temp(buttons_key, [sorts.as_slice(), &[clear.id, apply.id]].concat()));
                 if apply.clicked() || (enter && any) {
                     let blanks = checks.iter().any(|(v, on)| v == "(Blanks)" && *on);
                     let vals: Vec<String> = checks.iter().filter(|(v, on)| *on && v != "(Blanks)").map(|(v, _)| v.clone()).collect();
@@ -159,9 +168,11 @@ pub(super) fn context_menu(app: &mut SheetApp, ui: &mut egui::Ui) {
             if let Some(item) = insert_copied {
                 items.insert(6, item);
             }
-            // The viewer's menu only copies, selects and finds.
+            // The viewer's menu copies, selects and finds, and makes the view adjustments that
+            // change no cell (`gridcraft_engine::viewer::VIEW`): AutoFit, Hide and Unhide on
+            // whole rows or columns, filtering by a value, Wrap Text and freezing.
             if app.is_viewer() {
-                items = vec![("Copy", "edit.copy"), ("Select All", "edit.selectAll"), ("-", ""), ("Find…", "ui:find"), ("Go To…", "ui:goTo")];
+                items = viewer_items(app);
             }
             if show_details_offered(app)
                 && let Some(i) = items.iter().position(|(_, id)| *id == "data.sortDescending")
@@ -195,7 +206,9 @@ pub(super) fn context_menu(app: &mut SheetApp, ui: &mut egui::Ui) {
                                 let a = d.selection.active;
                                 let text = d.wb.active().map(|sh| gridcraft_engine::display::cell_text(&d.wb, sh, a)).unwrap_or_default();
                                 let has = d.wb.active().is_some_and(|sh| sh.autofilter.is_some());
-                                if !has {
+                                // In the viewer `data.filterBy` installs the filter itself; adding
+                                // one with `data.filter` is an edit.
+                                if !has && !app.is_viewer() {
                                     let _ = app.run("data.filter", json!({}));
                                 }
                                 app.run_or_alert("data.filterBy", json!({"column": col_to_letters(a.col), "values": [text]}));
@@ -225,6 +238,32 @@ pub(super) fn context_menu(app: &mut SheetApp, ui: &mut egui::Ui) {
     {
         app.grid.context_menu = None;
     }
+}
+
+/// The viewer's cell and header menu: see [`context_menu`].
+fn viewer_items(app: &SheetApp) -> Vec<(&'static str, &'static str)> {
+    let mut items = vec![("Copy", "edit.copy"), ("Select All", "edit.selectAll"), ("-", ""), ("Find…", "ui:find"), ("Go To…", "ui:goTo"), ("-", "")];
+    let Some(d) = app.session.active() else { return items };
+    let ranges = &d.selection.ranges;
+    let (cols, rows) = (!ranges.is_empty() && ranges.iter().all(|r| r.is_full_cols()), !ranges.is_empty() && ranges.iter().all(|r| r.is_full_rows()));
+    if cols && !rows {
+        items.extend([
+            ("AutoFit Column Width", "home.autofitColumnWidth"),
+            ("Hide", "home.hideColumns"),
+            ("Unhide", "home.unhideColumns"),
+            ("-", ""),
+        ]);
+    } else if rows && !cols {
+        items.extend([("AutoFit Row Height", "home.autofitRowHeight"), ("Hide", "home.hideRows"), ("Unhide", "home.unhideRows"), ("-", "")]);
+    } else {
+        items.extend([("Filter by Selected Cell's Value", "ui:filterValue"), ("-", "")]);
+    }
+    let frozen = d.wb.active().is_some_and(|sh| sh.freeze.is_some());
+    items.extend([
+        ("Wrap Text", "home.wrapText"),
+        if frozen { ("Unfreeze Panes", "view.unfreezePanes") } else { ("Freeze Panes", "view.freezePanes") },
+    ]);
+    items
 }
 
 /// Whether the cell menu offers Show Details (Excel's right-click › Show Details): the active cell

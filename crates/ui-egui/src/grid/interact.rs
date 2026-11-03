@@ -163,7 +163,9 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
         return;
     }
 
-    if !viewer && handle_header_autofit(app, &input) {
+    // AutoFit and unhide by double-clicking a header border are view adjustments: the viewer
+    // has them too.
+    if handle_header_autofit(app, &input) {
         return;
     }
 
@@ -191,10 +193,14 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
     // Press: choose the interaction mode before pointer movement is applied.
     if resp.drag_started() || (primary_clicked && app.grid.drag == Drag::None) {
         handle_press(app, &input);
-        // The viewer's drags only select: no fill, move, resize, freeze or column reordering, and
-        // no validation list to pick from.
+        // The viewer's drags select, resize columns and rows and move the freeze lines (view
+        // adjustments, [`gridcraft_engine::viewer::VIEW`]): no fill, move or column reordering,
+        // and no validation list to pick from.
         if viewer {
-            if !matches!(app.grid.drag, Drag::None | Drag::Select | Drag::Rows(_) | Drag::Cols(_)) {
+            if !matches!(
+                app.grid.drag,
+                Drag::None | Drag::Select | Drag::Rows(_) | Drag::Cols(_) | Drag::ResizeCol { .. } | Drag::ResizeRow { .. } | Drag::Freeze { .. }
+            ) {
                 app.grid.drag = Drag::None;
             }
             app.grid.list_picker = None;

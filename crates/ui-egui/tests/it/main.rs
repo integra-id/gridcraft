@@ -120,6 +120,7 @@ mod undo_while_grouping;
 mod validation_alert;
 mod validation_input_message;
 mod viewer_ui;
+mod viewer_view;
 mod wheel_zoom;
 mod whole_line_shortcuts;
 mod widgets;

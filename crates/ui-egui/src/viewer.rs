@@ -172,7 +172,7 @@ pub fn bar_fit(width: f32, file_tab: bool, has: bool, pct: f32, button: impl Fn(
         let left = file + SEPARATOR + b("Open", false) + b("Export", true) + b("Print", false);
         let zoom = if fit.zoom_steps { 2.0 * b("", false) + pct + 2.0 } else { 0.0 };
         // Fit keeps its label: its icon alone would look like Find's.
-        let right = if has { b("Find", false) + SEPARATOR + zoom + button("Fit", false) + 2.0 } else { 0.0 };
+        let right = if has { b("View", true) + b("Find", false) + SEPARATOR + zoom + button("Fit", false) + 2.0 } else { 0.0 };
         left + right + BAR_GAP
     };
     let fits = [BarFit { labels: true, zoom_steps: true }, BarFit { labels: false, zoom_steps: true }];
@@ -197,8 +197,71 @@ const SEPARATOR: f32 = 11.0;
 /// The least room kept between the toolbar's two groups.
 const BAR_GAP: f32 = 12.0;
 
+/// The View menu: how the sheet shows, for this session only. Each item is a view adjustment
+/// ([`gridcraft_engine::viewer::VIEW`]): it changes no value or formula, leaves the workbook
+/// clean, and copies and exports leave it out (PDF and Print show the sheet as on screen).
+fn view_menu(app: &mut SheetApp, ui: &mut Ui) {
+    let lang = app.ui.language;
+    ui.set_min_width(220.0);
+    let Some(sh) = app.session.active().and_then(|d| d.wb.active().cloned()) else { return };
+    let mut gridlines = sh.show_gridlines;
+    if ui.checkbox(&mut gridlines, lang.tr("Gridlines")).changed() {
+        act(app, "view.gridlines", json!({"on": gridlines}));
+    }
+    let mut headings = sh.show_headings;
+    if ui.checkbox(&mut headings, lang.tr("Headings")).changed() {
+        act(app, "view.headings", json!({"on": headings}));
+    }
+    ui.separator();
+    use gridcraft_engine::model::SheetViewMode as Mode;
+    for (mode, label, id) in [
+        (Mode::Normal, "Normal", "view.normal"),
+        (Mode::PageLayout, "Page Layout", "view.pageLayout"),
+        (Mode::PageBreakPreview, "Page Break Preview", "view.pageBreakPreview"),
+    ] {
+        if ui.radio(sh.view == mode, lang.tr(label)).clicked() {
+            act(app, id, json!({}));
+            ui.close();
+        }
+    }
+    ui.separator();
+    let frozen = sh.freeze.is_some();
+    let items: &[(&str, &str)] = &[
+        ("Freeze Panes", "view.freezePanes"),
+        ("Freeze Top Row", "view.freezeTopRow"),
+        ("Freeze First Column", "view.freezeFirstColumn"),
+        ("Unfreeze Panes", "view.unfreezePanes"),
+        ("-", ""),
+        ("Wrap Text", "home.wrapText"),
+        ("AutoFit Column Width", "home.autofitColumnWidth"),
+        ("AutoFit Row Height", "home.autofitRowHeight"),
+        ("-", ""),
+        ("Hide Rows", "home.hideRows"),
+        ("Hide Columns", "home.hideColumns"),
+        ("Unhide Rows", "home.unhideRows"),
+        ("Unhide Columns", "home.unhideColumns"),
+        ("-", ""),
+        ("Clear Filter", "data.clearFilter"),
+    ];
+    for &(label, id) in items {
+        if label == "-" {
+            ui.separator();
+            continue;
+        }
+        let enabled = match id {
+            "view.unfreezePanes" => frozen,
+            "data.clearFilter" => sh.autofilter.as_ref().is_some_and(|a| !a.criteria.is_empty()),
+            _ => true,
+        };
+        if ui.add_enabled(enabled, egui::Button::new(lang.tr(label))).clicked() {
+            act(app, id, json!({}));
+            ui.close();
+        }
+    }
+}
+
 /// The viewer's toolbar across the top of the window: File, Open, Export and Print on the left;
-/// Find and zoom on the right; the workbook's name with a "Read only" badge between.
+/// View, Find and zoom on the right; the workbook's name with a "Read only" badge between.
 pub fn bar(app: &mut SheetApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let lang = app.ui.language;
@@ -287,6 +350,8 @@ pub fn bar(app: &mut SheetApp, ui: &mut Ui) {
                     if small_button(ui, Icon::Find, shown("Find"), "Find (Ctrl+F)", false).clicked() {
                         app.open_dialog("find", json!({}));
                     }
+                    let menu = small_button(ui, Icon::Gridlines, shown("View"), "View: gridlines, freeze panes, column widths, hidden rows", true);
+                    egui::Popup::menu(&menu).show(|ui| view_menu(app, ui));
                     right_start = ui.min_rect().min.x;
                 });
             });

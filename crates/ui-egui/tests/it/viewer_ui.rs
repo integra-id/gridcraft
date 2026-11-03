@@ -113,11 +113,12 @@ fn ctrl_f_opens_find_in_the_viewer() {
 }
 
 /// The toolbar's buttons, by their accessible names (a label, or the tooltip when icon only).
-const BUTTONS: [(&str, &str); 6] = [
+const BUTTONS: [(&str, &str); 7] = [
     ("File", "File: open, print and export"),
     ("Open", "Open a workbook (Ctrl+O)"),
     ("Export", "Export a copy as PDF, CSV or Excel workbook"),
     ("Print", "Print (Ctrl+P)"),
+    ("View", "View: gridlines, freeze panes, column widths, hidden rows"),
     ("Find", "Find (Ctrl+F)"),
     ("Fit", "Fit"),
 ];
@@ -138,7 +139,7 @@ fn the_toolbar_fits_and_find_works_at_every_width() {
                 assert!(!ra.intersects(rb.shrink(0.5)), "{width}: {a} {ra:?} overlaps {b} {rb:?}");
             }
         }
-        let (label, tip) = BUTTONS[4];
+        let (label, tip) = BUTTONS[5];
         let at = button_rect(&h, label, tip).center();
         // A real pointer click at the button's middle: nothing else is on top of it.
         click(&mut h, at);
