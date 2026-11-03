@@ -181,9 +181,13 @@ pub fn bar_fit(width: f32, file_tab: bool, has: bool, pct: f32, button: impl Fn(
 
 /// How the workbook's name and the badge (`badge`, its width, when a workbook is open) share
 /// `room` between the toolbar's groups: the room the name gets (0 for none, below 30 px) and
-/// whether the badge shows. The badge goes before the name does; neither spills past `room`.
+/// whether the badge shows. The name goes first, then the badge; neither spills past `room`.
 pub fn title_fit(room: f32, badge: Option<f32>) -> (f32, bool) {
     let badge_shown = badge.is_some_and(|w| w <= room);
+    if badge.is_some() && !badge_shown {
+        // An open workbook's name alone, without the badge, would hide that it's read-only.
+        return (0.0, false);
+    }
     let left = room - badge.filter(|_| badge_shown).map_or(0.0, |w| w + 8.0);
     (if left >= 30.0 { left } else { 0.0 }, badge_shown)
 }
@@ -385,7 +389,7 @@ mod tests {
         // Too little for the name: the badge alone.
         assert_eq!(title_fit(90.0, Some(70.0)), (0.0, true));
         // Too little for the badge: nothing.
-        assert_eq!(title_fit(50.0, Some(70.0)), (50.0, false));
+        assert_eq!(title_fit(50.0, Some(70.0)), (0.0, false));
         assert_eq!(title_fit(20.0, Some(70.0)), (0.0, false));
         assert_eq!(title_fit(200.0, None), (200.0, false));
         for room in (-50..400).map(|r| r as f32) {
