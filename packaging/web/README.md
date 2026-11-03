@@ -78,6 +78,58 @@ location /gridcraft/ {
 
 Local test: `python3 -m http.server 8765` inside the folder, then open http://localhost:8765/.
 
+## Opening a workbook from an address
+
+`?url=` (or its alias `?src=`; `?url=` wins if both are given) opens a workbook when the page
+starts, read-only, as if it had been picked in File › Open:
+
+```
+https://example.com/gridcraft/?url=/files/budget.xlsx
+https://example.com/gridcraft/?url=https%3A%2F%2Ffiles.example.org%2Fq3.ods&name=Q3.ods
+<iframe src="https://example.com/gridcraft/?src=../reports/sales.xlsx" ...>
+```
+
+- **Addresses.** Relative addresses are resolved against the viewer page; absolute ones are
+  fetched as they are. Only `http:`, `https:` and `blob:` are fetched; `javascript:`, `data:`,
+  `file:` and the rest are refused. Percent-encode an address that has its own `?` or `&`
+  (`encodeURIComponent`), or its query becomes the viewer's.
+- **Formats.** Whatever File › Open reads: `.xlsx`, `.xlsm`, `.xls`, `.xlsb`, `.ods`, `.csv`,
+  `.tsv`, `.txt`, GridCraft `.json`. The engine tells xlsx, xls, xlsb and ods apart by their
+  content, so an address without an extension (`/download?id=5`) works for those; a text file
+  needs a `.csv`/`.tsv` name or a `text/csv` type.
+- **Name.** `?name=` if given, else the `Content-Disposition` file name, else the address's last
+  path segment (decoded, without its query), else `workbook.xlsx`. Only a file name is kept. A
+  name without a spreadsheet extension gets one from `Content-Type` when it is a spreadsheet type.
+- **Cookies** go only to the viewer's own origin (`credentials: same-origin`); a file behind
+  another site's login can't be opened this way.
+- **CORS.** A file on another origin can be read only if its server sends
+  `Access-Control-Allow-Origin` with the viewer's origin (or `*`). The viewer makes a plain `GET`,
+  so no preflight is needed. To use that server's `Content-Disposition` name, also send
+  `Access-Control-Expose-Headers: Content-Disposition`. For example, in nginx on the file server:
+
+  ```nginx
+  location /files/ {
+      add_header Access-Control-Allow-Origin "https://example.com" always;
+      add_header Access-Control-Expose-Headers "Content-Disposition, Content-Length" always;
+  }
+  ```
+
+  or in Apache (`.htaccess` next to the files, `mod_headers`):
+
+  ```apache
+  Header always set Access-Control-Allow-Origin "https://example.com"
+  Header always set Access-Control-Expose-Headers "Content-Disposition, Content-Length"
+  ```
+
+  Without it the browser blocks the download and the viewer says so. Files on the viewer's own
+  server need none of this.
+- **While it downloads** the sheet shows *Opening <name>…*. A bad address, a network or CORS
+  failure, an HTTP error (404, 403, …), an empty file, one larger than 512 MB or one GridCraft
+  can't read shows a message box (*Couldn't open name: why*) and is logged to the console; the
+  viewer stays usable.
+- `?url=` takes precedence over `?sample`, and is ignored with `?host=parent` (the parent page
+  sends the workbook then).
+
 ## Embedding in a page (iframe)
 
 ```html
@@ -114,3 +166,13 @@ sibling Craft apps do with `?webgl` / `?cpu`), document them here; they also wor
 iframe `src`.
 
 A browser with neither WebGPU nor WebGL2 gets a message in place of the app.
+
+## Query parameters
+
+| Parameter | Effect |
+|---|---|
+| `?webgl` | Force the WebGL2 backend |
+| `?sample=sales\|budget\|grades` | Open a built-in sample |
+| `?url=ADDRESS` / `?src=ADDRESS` (`&name=NAME`) | Open the workbook at that address (*Opening a workbook from an address*) |
+| `?chrome=none\|notitlebar\|nofiletab` | Leave out the title bar and/or the File tab |
+| `?host=parent` (`&author=`) | Same-origin host page sends the workbook and stores saves |

@@ -121,6 +121,17 @@ window, through `sample::open` (`viewer::open_sample`). The window title is
   with `file.new`) and titles the window *GridCraft Viewer*.
 - **Web app** (`apps/gridcraft-web`): sets `session.viewer = true`, then opens any `?sample=`
   with `sample::open` (`file.new` is an editing command), with the page title *GridCraft Viewer*.
+  `?url=ADDRESS` (alias `?src=`; `?url=` wins; optional `&name=`) fetches a workbook at start-up
+  and queues it in the inbox as a dropped file, so it opens read-only like any other:
+  `index.html?url=/files/budget.xlsx`, or `?url=https%3A%2F%2Ffiles.example.org%2Fq3.ods`, whose
+  server must then send `Access-Control-Allow-Origin` (CORS). Only http, https and blob
+  addresses; relative ones resolve against the page. The name comes from `&name=`,
+  `Content-Disposition` or the address (plus an extension from `Content-Type` when it has none);
+  the engine tells the formats apart by content. *Opening <name>…* shows while it downloads, and
+  a failure (bad address, network/CORS, HTTP error, too large, unreadable) shows a message box.
+  `?url=` wins over `?sample` and is ignored with `?host=parent`. The pure logic and its tests are
+  in `apps/gridcraft-web/src/url_open.rs`, the browser side in `src/web/open_url.rs`; hosting
+  notes in `packaging/web/README.md` (HOSTING.md in the package).
 
 ## Download size (web)
 
