@@ -17,6 +17,9 @@ impl SheetApp {
     }
 
     pub(super) fn run_command(&mut self, id: &str, params: Json) -> Result<Json, String> {
+        if let Some(why) = crate::viewer::refuses(self, id) {
+            return Err(format!("{id}: {why}"));
+        }
         let switches_window = id.starts_with("window.")
             || matches!(id, "view.newWindow" | "view.hideWindow" | "view.unhideWindow")
             || (id == "view.switchWindows" && ["window", "doc"].iter().any(|k| params.get(*k).is_some_and(|d| !d.is_null())));
@@ -100,6 +103,11 @@ impl SheetApp {
     }
 
     pub fn run_or_alert(&mut self, id: &str, params: Json) {
+        // The viewer says why a shortcut or menu item that edits does nothing, in a toast.
+        if let Some(why) = crate::viewer::refuses(self, id) {
+            self.toast = Some((why.to_string(), now_ms()));
+            return;
+        }
         // A menu/shortcut opens the settings first; the Print page's button submits explicitly.
         if id == "file.print" {
             if self.services.print_native.is_some() {
@@ -343,6 +351,10 @@ impl SheetApp {
         // Every Protect Sheet entry point (ribbon menus, keytips, tab menu) becomes Unprotect Sheet
         // on a protected sheet. A sheet without a password is unprotected straight away.
         let name = if name == "protectSheet" && self.active_sheet_protected() { "unprotectSheet" } else { name };
+        if !crate::viewer::opens_dialog(self, name) {
+            self.toast = Some((gridcraft_engine::viewer::REASON.to_string(), now_ms()));
+            return;
+        }
         if name == "unprotectSheet"
             && self
                 .session
@@ -364,6 +376,8 @@ impl SheetApp {
                     self.open_path(&path);
                 }
             }
+            // The viewer saves a copy (Save As in the engine would make it the workbook's file).
+            "saveAs" if self.is_viewer() => crate::viewer::export(self, "xlsx"),
             "saveAs" => {
                 let suggested = self.session.active().map(|d| d.display_title()).unwrap_or_else(|| "Book1".into());
                 if let Some(pick) = &self.services.pick_save {
@@ -413,6 +427,7 @@ impl SheetApp {
         if !self.chrome.file_tab {
             return;
         }
+        let page = if crate::viewer::shows_backstage_page(self, page) { page } else { crate::viewer::BACKSTAGE_START };
         if !self.commit_edit(0, 0, false, false) {
             return;
         }

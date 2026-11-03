@@ -161,6 +161,9 @@ struct Outcome {
 /// Draws the Backstage view in place of the ribbon, formula bar, grid and sheet tabs.
 pub fn show(app: &mut SheetApp, ui: &mut Ui) {
     let Some(mut bs) = app.backstage.take() else { return };
+    if !crate::viewer::shows_backstage_page(app, bs.page) {
+        bs.page = crate::viewer::BACKSTAGE_START;
+    }
     let ctx = ui.ctx().clone();
     // Esc inside a text field leaves the field; it closes the view only from outside one.
     let typing = bs.text_edit_focused;
@@ -179,19 +182,20 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
                 out.close = true;
             }
             ui.add_space(10.0);
-            for page in [Page::Home, Page::New, Page::Open] {
+            let viewer = app.is_viewer();
+            for page in [Page::Home, Page::New, Page::Open].into_iter().filter(|p| crate::viewer::shows_backstage_page(app, *p)) {
                 if nav_item(ui, page.icon(), lang.tr(page.label()), bs.page == page, nav_text, nav_sel).clicked() {
                     out.page = Some(page);
                 }
             }
             nav_separator(ui, nav_text);
-            if nav_item(ui, Page::Info.icon(), lang.tr("Info"), bs.page == Page::Info, nav_text, nav_sel).clicked() {
+            if !viewer && nav_item(ui, Page::Info.icon(), lang.tr("Info"), bs.page == Page::Info, nav_text, nav_sel).clicked() {
                 out.page = Some(Page::Info);
             }
-            if nav_item(ui, Icon::Save, lang.tr("Save"), false, nav_text, nav_sel).clicked() {
+            if !viewer && nav_item(ui, Icon::Save, lang.tr("Save"), false, nav_text, nav_sel).clicked() {
                 save(app, &mut out);
             }
-            for page in [Page::SaveAs, Page::Print, Page::Export] {
+            for page in [Page::SaveAs, Page::Print, Page::Export].into_iter().filter(|p| crate::viewer::shows_backstage_page(app, *p)) {
                 if nav_item(ui, page.icon(), lang.tr(page.label()), bs.page == page, nav_text, nav_sel).clicked() {
                     out.page = Some(page);
                 }
@@ -205,7 +209,7 @@ pub fn show(app: &mut SheetApp, ui: &mut Ui) {
             }
             // Bottom up: Account sits just above Options, as in Excel.
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
-                for page in [Page::Options, Page::Account] {
+                for page in [Page::Options, Page::Account].into_iter().filter(|p| crate::viewer::shows_backstage_page(app, *p)) {
                     if nav_item(ui, page.icon(), lang.tr(page.label()), bs.page == page, nav_text, nav_sel).clicked() {
                         out.page = Some(page);
                     }
@@ -723,6 +727,14 @@ fn export(app: &mut SheetApp, ui: &mut Ui, out: &mut Outcome) {
     }
     ui.add_space(14.0);
     section(ui, lang, "Change File Type");
+    // The viewer saves the workbook only as a copy.
+    if app.is_viewer()
+        && action_row(ui, Icon::Book, lang.tr("Excel Workbook copy (.xlsx)"), lang.tr("Save a copy of the workbook; the open file stays as it is."))
+            .clicked()
+        && export_as(app, "xlsx")
+    {
+        out.close = true;
+    }
     for (fmt, icon, title, detail) in [
         ("csv", Icon::TextColumns, "CSV (Comma delimited)", "Save the active sheet as comma-separated text."),
         ("html", Icon::Link, "Web Page (.html)", "Save the workbook as a web page."),
@@ -743,6 +755,7 @@ pub fn export_as(app: &mut SheetApp, fmt: &str) -> bool {
         "pdf" => "file.exportPdf",
         "csv" => "file.exportCsv",
         "html" => "file.exportHtml",
+        "xlsx" => "file.saveCopy",
         _ => return false,
     };
     let title = app.session.active().map(|d| d.display_title()).unwrap_or_else(|| "Book1".into());

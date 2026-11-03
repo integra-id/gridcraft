@@ -96,7 +96,8 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
         freeze_columns: freeze_cols,
         freeze_rows,
     };
-    if handle_draw_tool(app, &input) {
+    let viewer = app.is_viewer();
+    if !viewer && handle_draw_tool(app, &input) {
         return;
     }
     // A plain click on a slicer value tile toggles it (Ctrl/Cmd for multi-select); the clear
@@ -135,7 +136,11 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
             if resp.double_clicked() && app.open_object(obj) != crate::objects::OpenAction::Select {
                 return;
             }
-            if primary_drag && let Some(a) = sh.object_anchor(obj) {
+            // The viewer selects objects but doesn't move or resize them.
+            if primary_drag
+                && !viewer
+                && let Some(a) = sh.object_anchor(obj)
+            {
                 app.grid.drag = Drag::Object { obj, start: p, orig: (a.cell, a.dx, a.dy, a.width, a.height), handle, stepped: false };
                 // The first recognised drag frame already holds movement away from the press.
                 if let Some(now) = pos {
@@ -158,12 +163,13 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
         return;
     }
 
-    if handle_header_autofit(app, &input) {
+    if !viewer && handle_header_autofit(app, &input) {
         return;
     }
 
     // Double-click the fill handle: a double-click is also a click, so run it before the handle press returns.
-    if resp.double_clicked()
+    if !viewer
+        && resp.double_clicked()
         && let Some(p) = pos
         && input.on_handle(p)
     {
@@ -185,6 +191,14 @@ pub(super) fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Respo
     // Press: choose the interaction mode before pointer movement is applied.
     if resp.drag_started() || (primary_clicked && app.grid.drag == Drag::None) {
         handle_press(app, &input);
+        // The viewer's drags only select: no fill, move, resize, freeze or column reordering, and
+        // no validation list to pick from.
+        if viewer {
+            if !matches!(app.grid.drag, Drag::None | Drag::Select | Drag::Rows(_) | Drag::Cols(_)) {
+                app.grid.drag = Drag::None;
+            }
+            app.grid.list_picker = None;
+        }
         return;
     }
 

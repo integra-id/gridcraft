@@ -8,7 +8,7 @@ use super::updates_ui;
 use super::{
     CellRef, HashMap, INTERFACE_SCALE_MAX, INTERFACE_SCALE_MIN, Json, Notice, Perf, RangeRef, Session, SheetApp, UiRequest, UiState, backstage,
     clamp_interface_scale, clean_error, control, desktop_theme, dialogs, editor, floating_pictures, formula_bar, formula_locale, grid, i18n, json,
-    keytips, macro_ui, panes, pivot_pane, printing, ribbon, tabs, text_box, theme, widgets,
+    keytips, macro_ui, panes, pivot_pane, printing, ribbon, tabs, text_box, theme, viewer, widgets,
 };
 
 mod clipboard;
@@ -27,7 +27,11 @@ mod view;
 
 impl SheetApp {
     /// Constructs a `SheetApp` with default UI, grid, printing, control and screenshot state and the caller's session and services.
-    pub fn new(session: Session, services: Services) -> SheetApp {
+    pub fn new(mut session: Session, services: Services) -> SheetApp {
+        // A build without the editing interface is always the viewer.
+        if !viewer::EDITOR {
+            session.viewer = true;
+        }
         SheetApp {
             session,
             ui: UiState::default(),
@@ -157,7 +161,11 @@ impl SheetApp {
             return;
         }
         let Some(d) = self.session.active() else { return };
-        let title = format!("{}{}", d.display_title(), if d.is_dirty() { " — Edited" } else { "" });
+        let title = if self.is_viewer() {
+            viewer::window_title(self)
+        } else {
+            format!("{}{}", d.display_title(), if d.is_dirty() { " — Edited" } else { "" })
+        };
         if self.grid.last_title.as_deref() != Some(title.as_str()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.grid.last_title = Some(title);
@@ -210,14 +218,32 @@ impl SheetApp {
         if !self.chrome.file_tab {
             self.backstage = None;
         }
-        // Keytips opened the File view (Alt, F): its letters keep working there.
-        if self.backstage.is_none() || self.keytips.prefix().is_some() {
+        // Keytips opened the File view (Alt, F): its letters keep working there. The viewer has no
+        // ribbon, so no keytips.
+        let viewer = self.is_viewer();
+        if !viewer && (self.backstage.is_none() || self.keytips.prefix().is_some()) {
             self.ribbon_keys(&ctx);
         }
-        if self.chrome.title_bar {
+        if viewer {
+            viewer::bar(self, ui);
+        } else if self.chrome.title_bar {
             ribbon::title_bar(self, ui);
         }
-        if self.backstage.is_some() {
+        if viewer && self.backstage.is_none() && viewer::placeholder(self) {
+            viewer::empty(self, ui);
+        } else if viewer && self.backstage.is_none() {
+            // The viewer: the toolbar above, then the notices, the sheet tabs and the grid.
+            widgets::notice_bar(self, ui);
+            if self.ui.status_bar {
+                tabs::status_bar(self, ui);
+            }
+            tabs::sheet_tabs(self, ui);
+            egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.grid_bg)).show(ui, |ui| {
+                let g0 = now_ms();
+                grid::show(self, ui);
+                self.perf.grid_ms = now_ms() - g0;
+            });
+        } else if self.backstage.is_some() {
             // File tab: the Backstage view replaces everything below the title bar.
             backstage::show(self, ui);
         } else {

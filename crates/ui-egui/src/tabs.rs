@@ -178,12 +178,14 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                         }
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 0.0;
+                            // The viewer shows the tabs to switch sheets with: no renaming, moving or tab menu.
+                            let viewer = app.is_viewer();
                             for (i, name, color, active) in sheets {
-                                let renaming = app.grid.renaming_tab == Some(i);
+                                let renaming = !viewer && app.grid.renaming_tab == Some(i);
                                 let font = if active { theme::ui_bold(13.0) } else { theme::ui_font(13.0) };
                                 let tw = ui.painter().layout_no_wrap(name.clone(), font.clone(), t.text).size().x;
                                 let w = (tw + 32.0).max(72.0);
-                                let (r, resp) = ui.allocate_exact_size(vec2(w, 30.0), Sense::click_and_drag());
+                                let (r, resp) = ui.allocate_exact_size(vec2(w, 30.0), if viewer { Sense::click() } else { Sense::click_and_drag() });
                                 if active && reveal_active {
                                     resp.scroll_to_me(None);
                                 }
@@ -229,6 +231,9 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                                 // Sheet, Select All Sheets) act on the sheet that was clicked rather than the one that was active.
                                 if resp.clicked() || (resp.secondary_clicked() && !active) {
                                     activate_sheet(app, i);
+                                }
+                                if viewer {
+                                    continue;
                                 }
                                 if resp.double_clicked() {
                                     app.grid.renaming_tab = Some(i);
@@ -301,7 +306,9 @@ pub fn sheet_tabs(app: &mut SheetApp, ui: &mut Ui) {
                     });
             });
             ui.add_space(6.0);
-            if crate::widgets::icon_button(ui, Icon::Plus, t.text_dim, app.ui.language.tr("New sheet (⇧F11)"), vec2(26.0, 26.0)).clicked() {
+            if !app.is_viewer()
+                && crate::widgets::icon_button(ui, Icon::Plus, t.text_dim, app.ui.language.tr("New sheet (⇧F11)"), vec2(26.0, 26.0)).clicked()
+            {
                 app.run_or_alert("home.insertSheet", json!({}));
             }
             // The track ends where the grid does, so it stops under the vertical scrollbar.
@@ -339,7 +346,17 @@ pub fn status_bar(app: &mut SheetApp, ui: &mut Ui) {
                     gridcraft_engine::Mode::Edit => "Edit",
                     gridcraft_engine::Mode::Point => "Point",
                 };
-                text(ui, egui::RichText::new(app.ui.language.tr(mode)).font(theme::ui_font(12.5)).color(t.text_dim));
+                // The viewer has no formula bar: the active cell and what it holds show here.
+                match app.is_viewer().then(|| crate::viewer::cell_summary(app)).flatten() {
+                    Some(summary) => {
+                        let room = (ui.available_width() * 0.45).max(80.0);
+                        ui.add_sized(
+                            vec2(room.min(ui.painter().layout_no_wrap(summary.clone(), theme::ui_font(12.5), t.text).size().x + 4.0), 20.0),
+                            egui::Label::new(egui::RichText::new(summary).font(theme::ui_font(12.5)).color(t.text)).truncate(),
+                        );
+                    }
+                    None => text(ui, egui::RichText::new(app.ui.language.tr(mode)).font(theme::ui_font(12.5)).color(t.text_dim)),
+                }
                 crate::macro_ui::status(app, ui);
                 if let Some(d) = app.session.active() {
                     if d.wb.vba_project.is_some() {
@@ -359,7 +376,7 @@ pub fn status_bar(app: &mut SheetApp, ui: &mut Ui) {
                         };
                         text(ui, egui::RichText::new(label).font(theme::ui_font(12.5)).color(t.danger));
                     }
-                    if app.session.clipboard.is_some() && app.editor.is_none() {
+                    if app.session.clipboard.is_some() && app.editor.is_none() && !app.is_viewer() {
                         ui.add_space(12.0);
                         text(
                             ui,

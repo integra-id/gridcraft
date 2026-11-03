@@ -6,6 +6,11 @@ use super::{Arc, Drag, FillTag, RangeRef, Rect, Sense, Sheet, SheetApp, Stroke, 
 /// Draws the filter-header popup: sort, search/select-all, apply/clear, a lazily installed table autofilter, new-open search focus and dismissal.
 pub(super) fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_open: bool) {
     let Some((col, row, at)) = app.grid.filter_menu else { return };
+    // Filtering and sorting edit the sheet: the viewer has no filter menu.
+    if app.is_viewer() {
+        app.grid.filter_menu = None;
+        return;
+    }
     let Some(d) = app.session.active() else { return };
     let wb = d.wb.clone();
     let si = wb.active_sheet();
@@ -154,6 +159,10 @@ pub(super) fn context_menu(app: &mut SheetApp, ui: &mut egui::Ui) {
             if let Some(item) = insert_copied {
                 items.insert(6, item);
             }
+            // The viewer's menu only copies, selects and finds.
+            if app.is_viewer() {
+                items = vec![("Copy", "edit.copy"), ("Select All", "edit.selectAll"), ("-", ""), ("Find…", "ui:find"), ("Go To…", "ui:goTo")];
+            }
             if show_details_offered(app)
                 && let Some(i) = items.iter().position(|(_, id)| *id == "data.sortDescending")
             {
@@ -179,6 +188,8 @@ pub(super) fn context_menu(app: &mut SheetApp, ui: &mut egui::Ui) {
                         "ui:defineName" => app.open_dialog("defineName", json!({})),
                         "ui:insertLink" => app.open_dialog("insertLink", json!({})),
                         "ui:pickList" => app.open_dialog("pickList", json!({})),
+                        "ui:find" => app.open_dialog("find", json!({})),
+                        "ui:goTo" => app.open_dialog("goTo", json!({})),
                         "ui:filterValue" => {
                             if let Some(d) = app.session.active() {
                                 let a = d.selection.active;

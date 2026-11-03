@@ -8,6 +8,12 @@ description = "GridCraft egui frontend (Excel-style UI); swappable — nothing b
 [lints]
 workspace = true
 
+[features]
+default = ["editor"]
+# The editing interface. Without it the app is always GridCraft Viewer (`viewer::EDITOR`): the
+# web viewer builds without it.
+editor = []
+
 [dependencies]
 # The shared capture slot (`craft_ui::capture`) comes from the one craft-libs revision every
 # craft-libs dependency uses (see the root Cargo.toml).

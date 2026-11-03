@@ -32,7 +32,7 @@ pub(super) fn keyboard(app: &mut SheetApp, ctx: &egui::Context, resp: &egui::Res
     ctx.memory_mut(|m| {
         m.set_focus_lock_filter(resp.id, egui::EventFilter { tab: true, horizontal_arrows: true, vertical_arrows: true, escape: true })
     });
-    let events = ctx.input(|i| i.events.clone());
+    let events = grid_events(app, ctx);
     // A shortcut key that also types a character (Shift+Space sends Text(" ")) must not start an edit.
     let shortcut_pressed = events.iter().any(|e| {
         matches!(e, egui::Event::Key { pressed: true, modifiers: m, key, .. }
@@ -156,4 +156,31 @@ pub(super) fn keyboard(app: &mut SheetApp, ctx: &egui::Context, resp: &egui::Res
             _ => {}
         }
     }
+}
+
+/// This frame's input events for the grid; in the viewer without the ones that edit.
+fn grid_events(app: &mut SheetApp, ctx: &egui::Context) -> Vec<egui::Event> {
+    let mut events = ctx.input(|i| i.events.clone());
+    if app.is_viewer() {
+        viewer_keys(app, &mut events);
+    }
+    events
+}
+
+/// The viewer copies but neither cuts, pastes nor types into cells: drops the events that edit,
+/// and makes Enter move (it would otherwise paste a marked range or edit).
+fn viewer_keys(app: &mut SheetApp, events: &mut Vec<egui::Event>) {
+    use egui::Key;
+    events.retain(|ev| match ev {
+        egui::Event::Cut | egui::Event::Paste(_) | egui::Event::Text(_) => false,
+        egui::Event::Key { key: Key::Enter, pressed, modifiers: m, .. } => {
+            if *pressed && !m.command && !m.ctrl && !m.alt {
+                app.move_after_enter(if m.shift { -1 } else { 1 }, 0);
+            }
+            false
+        }
+        egui::Event::Key { key: Key::F2 | Key::Delete | Key::Backspace, .. } => false,
+        egui::Event::Key { key: Key::Space, modifiers: m, .. } => m.command || m.ctrl || m.shift,
+        _ => true,
+    });
 }
