@@ -17,10 +17,11 @@ const NO_LIMIT: f64 = 1e30;
 /// pass over k binding rows and f free variables costs about 3·k²·f (the normal equations and
 /// each multiplier's noise), and each pass drops at most one row, so a model at the constraint
 /// limit could otherwise take minutes.
-#[cfg(not(test))]
+#[cfg(not(all(test, feature = "editing")))]
 const MULTIPLIER_WORK: u64 = 1_000_000_000;
 /// A low limit in tests, so the refusal is reachable with a small model.
 #[cfg(test)]
+#[cfg(feature = "editing")]
 const MULTIPLIER_WORK: u64 = 20_000;
 
 /// Why a model has no Sensitivity report (`None` when it has one).
@@ -586,6 +587,7 @@ fn nonlinear_body(ev: &mut Evaluator, at: &At) -> Result<Body> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests {
     use super::{Goal, MULTIPLIER_WORK, Row, Sense, multipliers};
     use gridcraft_core::CellRef;

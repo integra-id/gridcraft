@@ -270,4 +270,5 @@ fn find_pivot(s: &Session, p: &Json) -> Result<(usize, usize)> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests;

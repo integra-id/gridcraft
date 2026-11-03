@@ -29,6 +29,7 @@ use filter::{clear_filter, filter_by, reapply, toggle_filter};
 use grouping::{detail, group, outline_settings, show_levels, subtotal};
 use sort::{quick_sort, sort};
 #[cfg(test)]
+#[cfg(feature = "editing")]
 use tools::split_delimited;
 use tools::{remove_duplicates, text_to_columns};
 pub use validation::{check_validation, list_items};
@@ -237,4 +238,5 @@ fn guess_header(wb: &Workbook, sh: &Sheet, r: RangeRef) -> bool {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests;

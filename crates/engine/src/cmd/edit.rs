@@ -22,10 +22,12 @@ mod selection;
 use cell::{cell_set, range_fill, range_set_values};
 pub(crate) use cell::{check_arg_counts, input_to_cell, is_formula_input, json_to_input, parse_typed_formula};
 #[cfg(test)]
+#[cfg(feature = "editing")]
 pub(crate) use clipboard::parse_tsv;
 use clipboard::{clear_clipboard, copy, cut, paste};
 use fill::{auto_fill, fill_dir, fill_series, flash_fill};
 #[cfg(test)]
+#[cfg(feature = "editing")]
 use find::replace_ci;
 pub(crate) use find::wildcard;
 use find::{find, replace};
@@ -33,6 +35,7 @@ pub(super) use go_to::go_to;
 pub use go_to::go_to_names;
 use go_to::go_to_special;
 #[cfg(test)]
+#[cfg(feature = "editing")]
 use go_to::{GO_TO_MAX_AREAS, GO_TO_RECENT, reference_parts};
 use paste_special::paste_special;
 pub(crate) use paste_special::{rewrite_all_formulas, rewrite_cell_links, rewrite_python_refs};
@@ -421,4 +424,5 @@ fn begin_edit(s: &mut Session, _: &Json) -> Result<Json> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests;

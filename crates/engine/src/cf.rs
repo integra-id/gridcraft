@@ -65,6 +65,7 @@ impl RuleStats {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 thread_local! {
     /// Cells `numbers_in` visited on this thread (tests count the work a lookup does).
     static SCANNED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -80,6 +81,7 @@ fn numbers_in(sh: &Sheet, ranges: &[RangeRef], need: StatsNeed) -> (Vec<f64>, Ha
         };
         for c in r.iter().take(2_000_000) {
             #[cfg(test)]
+            #[cfg(feature = "editing")]
             SCANNED.with(|n| n.set(n.get() + 1));
             let v = sh.value(c);
             match need {
@@ -412,6 +414,7 @@ fn relative(f: &str, first: CellRef, c: CellRef) -> String {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests {
     use serde_json::json;
 

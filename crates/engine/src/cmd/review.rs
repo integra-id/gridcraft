@@ -38,7 +38,7 @@ pub fn specs() -> Vec<CommandSpec> {
             shortcut_mac: None,
             params: "{action?: list (default) | add | modify | delete | unlock, title?, range?, password?, newTitle?, sheet?} → ranges",
             enabled: has_doc,
-            run: allow_edit_ranges,
+            run: super::run_if_kept!("review.allowEditRanges", true, allow_edit_ranges),
             journal: false,
             undoable: true,
         },
@@ -358,6 +358,7 @@ fn accessibility(s: &mut Session, _: &Json) -> Result<Json> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests {
     use super::*;
 
@@ -529,6 +530,7 @@ mod tests {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod edit_range_tests {
     use super::*;
 

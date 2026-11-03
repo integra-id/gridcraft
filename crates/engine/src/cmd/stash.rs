@@ -67,6 +67,7 @@ impl<'a> Parts<'a> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 thread_local! {
     /// Names [`group`] has looked at on this thread, so a test can bound the work of a listing.
     static NAME_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
@@ -79,6 +80,7 @@ fn group<'a>(wb: &'a Workbook, prefix: &str) -> BTreeMap<String, Parts<'a>> {
     let mut items: BTreeMap<String, Parts<'a>> = BTreeMap::new();
     for n in wb.names.iter() {
         #[cfg(test)]
+        #[cfg(feature = "editing")]
         NAME_VISITS.with(|v| v.set(v.get().saturating_add(1)));
         let Some((k, chunk)) = item_of(n) else { continue };
         let k = k.to_ascii_lowercase();
@@ -372,6 +374,7 @@ pub fn string_literals(f: &str) -> String {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests {
     use super::*;
 

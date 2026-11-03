@@ -137,6 +137,7 @@ pub(crate) fn lenient<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Stri
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests {
     use super::*;
     use serde_json::json;

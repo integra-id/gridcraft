@@ -920,4 +920,5 @@ pub fn image_size(data: &[u8]) -> Option<(u32, u32)> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests;

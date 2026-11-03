@@ -45,6 +45,7 @@ pub fn classify(target: &str) -> LinkKind {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests {
     use super::*;
 

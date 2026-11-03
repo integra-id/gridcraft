@@ -12,7 +12,16 @@
 //! `tests::viewer` runs every allowed command on a sample workbook and checks the workbook is
 //! unchanged, so a command that edits after all can't slip through the lists.
 
+use serde_json::Value as Json;
+
 use crate::cmd::CommandSpec;
+use crate::{EngineError, Result, Session};
+
+/// Whether this build has the editing commands (the `editing` feature, on by default). Without it
+/// every command [`refuses`] refuses keeps its place in the command list (id, label, menu,
+/// shortcut, params) but has no code: [`crate::Session::execute`] refuses it with [`REASON`] as in
+/// viewer mode, and the session is always a viewer. GridCraft Viewer's web build leaves it out.
+pub const EDITING_BUILD: bool = cfg!(feature = "editing");
 
 /// Why a refused command is unavailable in viewer mode.
 pub const REASON: &str = "GridCraft Viewer only views workbooks (editing is turned off)";
@@ -61,4 +70,45 @@ pub fn refuses(spec: &CommandSpec) -> bool {
 /// Whether viewer mode refuses the command `id` (unknown ids are refused).
 pub fn refuses_id(id: &str) -> bool {
     crate::find_command(id).is_none_or(refuses)
+}
+
+/// Whether a build without the editing commands ([`EDITING_BUILD`]) keeps command `id`'s code:
+/// [`refuses`], worked out at compile time from the id and whether the command is undoable.
+pub const fn kept_without_editing(id: &str, undoable: bool) -> bool {
+    if undoable { contains(VIEW, id) } else { !contains(EDITING, id) }
+}
+
+/// Whether `list` holds `id`, at compile time.
+const fn contains(list: &[&str], id: &str) -> bool {
+    let mut i = 0;
+    while i < list.len() {
+        if same(list[i], id) {
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
+
+/// Whether two strings are equal, at compile time.
+const fn same(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < a.len() {
+        if a[i] != b[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
+/// The code of a command a build without the editing commands leaves out ([`EDITING_BUILD`]).
+/// `Session::execute` refuses such a command before it gets here; a nested run gets the same
+/// reason.
+pub fn left_out(_: &mut Session, _: &Json) -> Result<Json> {
+    Err(EngineError::Other(REASON.to_string()))
 }

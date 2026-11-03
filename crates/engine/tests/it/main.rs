@@ -1,4 +1,6 @@
-//! The crate's integration tests, one module per file, built as one test binary.
+//! The crate's integration tests, one module per file, built as one test binary. They edit
+//! workbooks, so they need the editing commands (the `editing` feature, on by default).
+#![cfg(feature = "editing")]
 
 mod autofit_filter_buttons;
 mod cf_formula_validate;

@@ -88,6 +88,7 @@ pub fn previewable(id: &str) -> bool {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests {
     use super::*;
     use serde_json::json;

@@ -186,6 +186,7 @@ fn thesaurus(_: &mut Session, p: &Json) -> Result<Json> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests {
     use super::*;
 

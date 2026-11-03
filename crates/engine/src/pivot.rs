@@ -29,6 +29,7 @@ use compute::compute_from;
 pub use compute::{NOT_A_VALUE_CELL, detail_cells, detail_records};
 pub use items::{distinct_labels, func_caption, item_label};
 #[cfg(test)]
+#[cfg(feature = "editing")]
 use output::data_cols_exceed_sheet;
 pub use output::{CellKind, OutCell, Output, RowKind};
 use output::{cell_style, look};
@@ -318,6 +319,7 @@ pub fn refresh(wb: &mut Workbook, sheet: usize, idx: usize, replace: bool) -> Re
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod fit_tests {
     use super::data_cols_exceed_sheet;
 

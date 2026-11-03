@@ -98,6 +98,7 @@ pub fn group_at(lines: &BTreeMap<u32, LineInfo>, line: u32, level: u8) -> Option
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests {
     use super::*;
 

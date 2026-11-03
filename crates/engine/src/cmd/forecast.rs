@@ -466,6 +466,7 @@ fn steps_to(timeline: &Timeline, end: f64, cap: u32) -> Result<u32> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests {
     use gridcraft_core::{CellRef, Value};
     use serde_json::json;

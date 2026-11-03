@@ -823,6 +823,7 @@ pub use sizes::{approx_text_width, chars_to_points};
 use sizes::{autofit_cols, autofit_rows, col_width, default_width, hide, row_height};
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests {
     use super::*;
 

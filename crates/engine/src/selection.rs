@@ -221,6 +221,7 @@ pub fn current_region(sheet: &Sheet, c: CellRef) -> RangeRef {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests {
     use super::*;
     use gridcraft_core::Value;

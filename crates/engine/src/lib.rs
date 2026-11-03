@@ -672,7 +672,8 @@ impl Session {
     /// was clean stays clean: what the viewer runs (recalculation, zoom) changes no content, and
     /// zoom's undo step is dropped (there is no Undo in a viewer).
     pub fn execute(&mut self, id: &str, params: Json) -> Result<Json> {
-        if !self.viewer {
+        // A build without the editing commands is always a viewer (`viewer::EDITING_BUILD`).
+        if !self.viewer && viewer::EDITING_BUILD {
             return self.execute_command(id, params);
         }
         let spec = find_command(id).ok_or_else(|| EngineError::UnknownCommand(id.to_string()))?;
@@ -727,6 +728,7 @@ impl Session {
         // copy; front ends run queries all the time.
         let history_before = before.as_ref().filter(|_| !query).and_then(|(uid, ..)| {
             #[cfg(test)]
+            #[cfg(feature = "editing")]
             tests::HISTORY_COPIES.with(|n| n.set(n.get().saturating_add(1)));
             self.docs.iter().find(|d| d.uid == *uid).map(|d| (d.undo.clone(), d.redo.clone()))
         });
@@ -1092,6 +1094,7 @@ impl Session {
     /// Runs a command as a command in progress would (one level deeper), for tests of what a
     /// nested call may do.
     #[cfg(test)]
+    #[cfg(feature = "editing")]
     pub(crate) fn execute_nested(&mut self, id: &str, params: Json) -> Result<Json> {
         self.depth = self.depth.saturating_add(1);
         let r = self.execute(id, params);
@@ -1160,4 +1163,9 @@ pub fn cell(r: u32, c: u32) -> CellRef {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests;
+// A build without the editing commands: what still runs, and how the rest refuses.
+#[cfg(test)]
+#[cfg(not(feature = "editing"))]
+mod read_only_tests;

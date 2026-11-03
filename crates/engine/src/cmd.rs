@@ -145,16 +145,28 @@ pub fn has_clipboard(s: &Session) -> std::result::Result<(), String> {
 
 macro_rules! cmd {
     ($id:literal, $label:literal, [$($m:literal),*], $sc:expr, $params:literal, $en:expr, $run:expr) => {
-        $crate::cmd::CommandSpec { id: $id, label: $label, menu: &[$($m),*], shortcut: $sc, shortcut_mac: None, params: $params, enabled: $en, run: $run, journal: true, undoable: true }
+        $crate::cmd::CommandSpec { id: $id, label: $label, menu: &[$($m),*], shortcut: $sc, shortcut_mac: None, params: $params, enabled: $en, run: $crate::cmd::run_if_kept!($id, true, $run), journal: true, undoable: true }
     };
     (query $id:literal, $label:literal, [$($m:literal),*], $sc:expr, $params:literal, $en:expr, $run:expr) => {
-        $crate::cmd::CommandSpec { id: $id, label: $label, menu: &[$($m),*], shortcut: $sc, shortcut_mac: None, params: $params, enabled: $en, run: $run, journal: false, undoable: false }
+        $crate::cmd::CommandSpec { id: $id, label: $label, menu: &[$($m),*], shortcut: $sc, shortcut_mac: None, params: $params, enabled: $en, run: $crate::cmd::run_if_kept!($id, false, $run), journal: false, undoable: false }
     };
     (noundo $id:literal, $label:literal, [$($m:literal),*], $sc:expr, $params:literal, $en:expr, $run:expr) => {
-        $crate::cmd::CommandSpec { id: $id, label: $label, menu: &[$($m),*], shortcut: $sc, shortcut_mac: None, params: $params, enabled: $en, run: $run, journal: true, undoable: false }
+        $crate::cmd::CommandSpec { id: $id, label: $label, menu: &[$($m),*], shortcut: $sc, shortcut_mac: None, params: $params, enabled: $en, run: $crate::cmd::run_if_kept!($id, false, $run), journal: true, undoable: false }
     };
 }
 pub(crate) use cmd;
+
+/// A command's code, or [`crate::viewer::left_out`] in a build without the editing commands when
+/// the viewer refuses it ([`crate::viewer::kept_without_editing`]). The choice is a constant, so
+/// the code left out isn't in that build at all.
+macro_rules! run_if_kept {
+    ($id:literal, $undoable:literal, $run:expr) => {{
+        const RUN: $crate::cmd::Run =
+            if $crate::viewer::EDITING_BUILD || $crate::viewer::kept_without_editing($id, $undoable) { $run } else { $crate::viewer::left_out };
+        RUN
+    }};
+}
+pub(crate) use run_if_kept;
 
 pub fn command_specs() -> &'static [CommandSpec] {
     static SPECS: std::sync::OnceLock<Vec<CommandSpec>> = std::sync::OnceLock::new();
@@ -221,6 +233,7 @@ pub fn register_test_command(id: &'static str, run: Run) {
 
 /// Test-only: an undoable command, to exercise how `execute` records its step.
 #[cfg(test)]
+#[cfg(feature = "editing")]
 pub(crate) fn register_undoable_test_command(id: &'static str, run: Run) {
     let spec: &'static CommandSpec = Box::leak(Box::new(CommandSpec {
         id,

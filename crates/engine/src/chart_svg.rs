@@ -146,6 +146,7 @@ fn num(v: f32) -> String {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests {
     use super::*;
 

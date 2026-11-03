@@ -525,4 +525,5 @@ pub fn command_steps(steps: &[Step]) -> Vec<(String, &str, &Json)> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests;

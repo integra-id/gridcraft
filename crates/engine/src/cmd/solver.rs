@@ -332,4 +332,5 @@ fn run(s: &mut Session, p: &Json) -> Result<Json> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests;

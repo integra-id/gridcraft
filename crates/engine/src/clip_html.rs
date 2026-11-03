@@ -366,6 +366,7 @@ pub(crate) fn format_for(shown: &str, n: f64) -> Option<String> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests {
     use super::*;
 

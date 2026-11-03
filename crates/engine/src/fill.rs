@@ -794,6 +794,7 @@ fn synthesize(src: &str, dst: &str) -> Vec<Program> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests {
     use super::*;
 

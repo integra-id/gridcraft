@@ -246,6 +246,7 @@ pub fn need_for(sh: &Sheet, x: f64, y: f64) -> (u32, u32) {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests {
     use gridcraft_model::{Orientation, Sheet};
 

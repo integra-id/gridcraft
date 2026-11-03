@@ -11,6 +11,7 @@
 
 use gridcraft_core::{CellRef, MAX_COLS, MAX_ROWS, RangeRef, Value};
 #[cfg(test)]
+#[cfg(feature = "editing")]
 use gridcraft_model::{Alignment, Image, SheetViewMode};
 use gridcraft_model::{
     Anchor, BorderLine, BorderStyle, Borders, Color, HAlign, Orientation, PageOrder, PatternType, PrintSettings, ShapeKind, Sheet, Style, StyleId,
@@ -36,12 +37,14 @@ pub use header_footer::{
 type PicCache = std::collections::HashMap<(usize, usize), Option<(Vec<u8>, u32, u32)>>;
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 use layout::bands;
 pub(crate) use layout::split_bands;
 pub use layout::{PrintOptions, SheetLayout, layout_sheet, layouts, paper_size, print_range};
 use layout::{known_paper, seg_size, segments};
 use objects::draw_objects;
 #[cfg(test)]
+#[cfg(feature = "editing")]
 use text::{center_across_width, wrap_lines};
 
 pub fn specs() -> Vec<CommandSpec> {
@@ -406,4 +409,5 @@ fn page_setup(s: &mut Session, p: &Json) -> Result<Json> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests;

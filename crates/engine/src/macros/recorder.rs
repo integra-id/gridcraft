@@ -471,6 +471,7 @@ pub fn infer_input(wb: &Workbook, sheet: usize, r: RangeRef) -> NamedInput {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests {
     use super::*;
 

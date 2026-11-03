@@ -308,6 +308,7 @@ impl CalcSet {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests {
     use super::*;
 

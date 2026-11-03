@@ -22,9 +22,11 @@ mod scenarios;
 
 use advanced_filter::advanced_filter;
 #[cfg(test)]
+#[cfg(feature = "editing")]
 pub(crate) use advanced_filter::criterion_matches;
 use consolidate::consolidate;
 #[cfg(test)]
+#[cfg(feature = "editing")]
 pub(crate) use scenarios::{SCENARIO_NAME, load_scenarios};
 use scenarios::{scenario_add, scenario_delete, scenario_list, scenario_show, scenario_summary};
 
@@ -432,4 +434,5 @@ fn data_table(s: &mut Session, p: &Json) -> Result<Json> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests;

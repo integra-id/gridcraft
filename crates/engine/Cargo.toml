@@ -9,7 +9,11 @@ description = "GridCraft engine: sessions, commands, history, clipboard, fill, s
 workspace = true
 
 [features]
-default = ["macros"]
+default = ["editing", "macros"]
+# The editing commands' code. Without it they keep their place in the command list and refuse as
+# in viewer mode ([`viewer::EDITING_BUILD`]): the build is GridCraft Viewer. The web viewer leaves
+# it out.
+editing = []
 # Running, checking, recording and debugging macros. Without it the commands are there but say
 # this build doesn't run macros ([`macros::RUNTIME`]); macros are still read and kept with the
 # file. GridCraft Viewer's web build leaves it out: it runs no macros.

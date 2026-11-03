@@ -11,7 +11,7 @@ description = "GridCraft desktop app"
 workspace = true
 
 [dependencies]
-gridcraft-engine = { workspace = true, features = ["macros"] }
+gridcraft-engine = { workspace = true, features = ["editing", "macros"] }
 # The desktop keeps the editing interface compiled in; `main` opens it as GridCraft Viewer
 # (`session.viewer`), so the engine refuses every command that edits.
 gridcraft-ui-egui = { workspace = true, features = ["editor"] }

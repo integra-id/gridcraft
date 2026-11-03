@@ -252,6 +252,7 @@ pub(crate) fn sync_headers(cx: &mut crate::cmd::Ctx) {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod tests {
     use gridcraft_core::Value;
     use serde_json::json;
@@ -295,6 +296,7 @@ mod tests {
 }
 
 #[cfg(test)]
+#[cfg(feature = "editing")]
 mod style_tests {
     use super::*;
 
