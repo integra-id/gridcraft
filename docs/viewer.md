@@ -28,6 +28,38 @@ cargo run -p gridcraft-ui-egui --example snapshot -- --viewer --in book.xlsx out
 | **Navigates** | scrolling, arrows, Page Up/Down, Ctrl+arrows, sheet tabs (click, the ◀ ▶ arrows, the sheet list), Go To (Ctrl+G), Find (Ctrl+F, without Replace), and zoom (the toolbar's − / % / + / Fit, the status-bar slider, Ctrl+wheel, the Zoom dialog) |
 | **Selects and copies** | mouse and keyboard selection, rows and columns, Ctrl+A, and Ctrl+C or the context menu's Copy. The status bar shows the active cell and what it holds (`G5: =SUM(C5:F5)`), because the viewer has no formula bar |
 | **Computes** | formulas recalculate as they do in the editor (`formulas.calculateNow`, volatile functions, charts, sparklines and conditional formats) |
+| **Adjusts the view** | column widths and row heights (drag or double-click a header border for AutoFit), Wrap Text, Freeze Panes, Gridlines and Headings, hiding and unhiding rows and columns, AutoFilter on existing filters and tables (without Sort), and the Normal, Page Layout and Page Break Preview views. These last for the session only: see below |
+
+## View adjustments
+
+The viewer can change how a sheet shows without changing what it holds
+(`gridcraft_engine::viewer::VIEW`): zoom; Gridlines and Headings; Freeze Panes, Freeze Top Row,
+Freeze First Column and Unfreeze; column width and row height (`home.columnWidth`,
+`home.rowHeight`, AutoFit); Hide and Unhide rows and columns; Wrap Text; filtering the rows of an
+AutoFilter or a table (`data.filterBy`, `data.clearFilter`, `data.reapply`); showing and hiding
+outline levels; and the Normal, Page Layout and Page Break Preview views.
+
+- **Where**: the toolbar's **View ▾** menu (Gridlines, Headings, the three views, the freeze
+  commands, Wrap Text, AutoFit, Hide/Unhide, Clear Filter). It works on the selection, and at
+  narrow widths it keeps its icon like the other buttons. The right-click menu on whole columns
+  or rows offers AutoFit, Hide and Unhide; on cells it offers Filter by Selected Cell's Value.
+  Both also offer Wrap Text and Freeze or Unfreeze Panes. Drag a header border to resize, and
+  double-click it to AutoFit (or to unhide a hidden line). Drag the freeze lines to move them.
+  The filter button on an AutoFilter or table header opens the filter list without **Sort**.
+- **Session only**: no value, formula or stored setting is written anywhere. The workbook stays
+  clean, leaves no undo step and closing never asks to save (`Session::execute` drops the steps
+  and keeps `saved` in step). Formula results can read differently while rows are hidden or
+  filtered out, because `SUBTOTAL(10x, …)` and `AGGREGATE` leave hidden rows out, as in Excel.
+- **Copies keep the original**: the Excel workbook copy, CSV and Web Page exports
+  (`viewer::COPIES`) write the workbook as it was opened (`DocState::as_opened`, kept from the
+  first adjustment), so widths, hidden rows, filters, wrapping and freezing don't go along. Only
+  the zoom, the sheet view and the active sheet carry over (`viewer::as_opened`).
+- **PDF and Print show the screen**: they print the sheet as you see it, with hidden rows and
+  columns left out, the widths, wrapping and filters you set, and the gridlines and headings as
+  the page setup asks for them. To print the original, reopen the workbook.
+- **Still refused**: every edit. Sort (it moves cells), adding or removing an AutoFilter
+  (`data.filter`), the Column Width and Row Height dialogs, and moving cells or columns by drag.
+  There is no full-screen command in GridCraft, so the viewer has none (the browser's F11 works).
 
 ## The window
 
@@ -37,7 +69,7 @@ ribbon and the formula bar:
 - On the left: **File** (the File page on Open), **Open**, **Export ▾** (PDF, CSV, Excel
   workbook copy) and **Print**.
 - In the centre: the workbook's name and a green **Read only** badge.
-- On the right: **Find**, **−**, the zoom percentage (click it for 100%), **+** and **Fit** (fits the
+- On the right: **View ▾** (see *View adjustments*), **Find**, **−**, the zoom percentage (click it for 100%), **+** and **Fit** (fits the
   sheet's used range in the window, 25–200%).
 - In a narrow window the buttons drop their labels (each keeps its icon and tooltip; **Fit**
   keeps its label), then the zoom steps (− % +), so the two groups never overlap
@@ -53,21 +85,24 @@ window, through `sample::open` (`viewer::open_sample`). The window title is
 ## What is removed or turned off
 
 - **The engine refuses every command that edits** (`Session::viewer`,
-  `crates/engine/src/viewer.rs`). It refuses every `undoable` command except view zoom, and the
+  `crates/engine/src/viewer.rs`). It refuses every `undoable` command except the view adjustments (`viewer::VIEW`), and the
   commands that don't touch the undo history but only exist to edit (`viewer::EDITING`): undo,
   redo, cut, begin edit, New, Save, Save As, Properties, custom views, split, the ink tools, macro
   recording and script trust. The gate sits in `Session::execute`, so the window, the control
   channel and MCP clients all get the same answer: `Disabled(id, "GridCraft Viewer only views
   workbooks (editing is turned off)")`. `CommandSpec::info` greys those commands out with that
-  reason. Allowed commands that touch view state (zoom, recalculation) leave no undo step and
-  don't make the workbook dirty, so closing never asks to save.
+  reason. Allowed commands that touch view state (zoom and the other view adjustments,
+  recalculation) leave no undo step and don't make the workbook dirty, so closing never asks to
+  save.
 - **Typing, F2, Enter-to-edit, Delete/Backspace, cut, paste and the checkbox Space toggle** do
   nothing on the grid and say why in the "read only" toast, as shortcuts bound to editing
   commands do. Enter only moves.
-- **Mouse editing**: the fill handle, moving or resizing cells, objects, rows and columns, header
-  autofit and validation pick-lists are off. Drags only select.
-- **Context menus**: the cell menu offers Copy, Select All, Find… and Go To…. The AutoFilter menu
-  and the sheet-tab menu are gone, and tabs can't be renamed, moved or added.
+- **Mouse editing**: the fill handle, moving cells, objects and columns, resizing objects and
+  validation pick-lists are off. Drags select, resize rows and columns and move the freeze lines
+  (view adjustments).
+- **Context menus**: the cell menu offers Copy, Select All, Find…, Go To… and the view
+  adjustments above. The AutoFilter menu has no Sort. The sheet-tab menu is gone, and tabs can't
+  be renamed, moved or added.
 - **The File page** shows only Open, Print, Export, Close and Options (`viewer::BACKSTAGE_PAGES`).
   Home, New, Info, Save, Save As and Account are hidden. Export has an *Excel Workbook copy* row.
 - **Dialogs**: only Find, Go To, Zoom, About, command search and the workbook-password prompt open
