@@ -6,8 +6,9 @@
 //! without one that start editing, write the open file in place, make a new workbook to edit, or
 //! record and change macros ([`EDITING`]). What is left is what a viewer needs: opening and
 //! closing workbooks, exporting a copy ([`crate::cmd`]'s `file.saveCopy`, Export PDF/CSV/HTML),
-//! printing, selection, Copy, Find and Go To, sheet switching, recalculation, zoom and the window
-//! commands. [`refuses`] also greys the commands out ([`crate::CommandSpec::info`]).
+//! printing, selection, Copy, Find and Go To, sheet switching, recalculation, the window commands
+//! and the view adjustments in [`VIEW`] (zoom, widths and heights, hiding, freezing, Wrap Text,
+//! filtering), which change no value or formula and never reach a copy. [`refuses`] also greys the commands out ([`crate::CommandSpec::info`]).
 //!
 //! `tests::viewer` runs every allowed command on a sample workbook and checks the workbook is
 //! unchanged, so a command that edits after all can't slip through the lists.
@@ -26,9 +27,68 @@ pub const EDITING_BUILD: bool = cfg!(feature = "editing");
 /// Why a refused command is unavailable in viewer mode.
 pub const REASON: &str = "GridCraft Viewer only views workbooks (editing is turned off)";
 
-/// Undoable commands the viewer allows: zoom changes how the window shows the sheet. It is saved
-/// with the file but doesn't mark a clean workbook as changed, and the viewer never saves in place.
-pub const VIEW: &[&str] = &["view.zoom", "view.zoom100", "view.zoomToSelection"];
+/// Undoable commands the viewer allows: they change how the window shows the sheet, never a
+/// cell's value or formula. Zoom; gridlines and headings; freezing panes; column widths and row
+/// heights (dragging a header border, AutoFit), hiding and unhiding rows and columns; Wrap Text;
+/// filtering with an AutoFilter or a table's filter buttons (rows are hidden, none is moved or
+/// changed: Sort, which moves cells, stays refused, and so does adding or removing a filter); and
+/// expanding or collapsing outline groups.
+///
+/// They are view-level and last for the session: [`crate::Session::execute`] keeps the workbook
+/// clean and drops their undo steps, keeps the workbook as it was before the first of them
+/// ([`crate::DocState::as_opened`]), and the commands that write a copy ([`COPIES`]) write that
+/// one, so an exported workbook, CSV or web page holds the file's own content. PDF and Print show
+/// the sheet as it is on the screen.
+pub const VIEW: &[&str] = &[
+    "view.zoom",
+    "view.zoom100",
+    "view.zoomToSelection",
+    "view.gridlines",
+    "view.headings",
+    "view.freezePanes",
+    "view.freezeTopRow",
+    "view.freezeFirstColumn",
+    "view.unfreezePanes",
+    "home.columnWidth",
+    "home.rowHeight",
+    "home.autofitColumnWidth",
+    "home.autofitRowHeight",
+    "home.hideRows",
+    "home.hideColumns",
+    "home.unhideRows",
+    "home.unhideColumns",
+    "home.wrapText",
+    "data.filterBy",
+    "data.clearFilter",
+    "data.reapply",
+    "data.showDetail",
+    "data.hideDetail",
+    "data.showLevels",
+];
+
+/// Commands that write a copy of the workbook's content: in the viewer they write the workbook
+/// as opened, without the session's view adjustments ([`VIEW`], [`as_opened`]).
+pub const COPIES: &[&str] = &["file.saveCopy", "file.exportCsv", "file.exportHtml"];
+
+/// The workbook to write for a copy: `opened` (before the session's view adjustments) where the
+/// user is now in `current`: the active sheet, and each sheet's zoom, view mode, active cell and
+/// scroll position.
+pub fn as_opened(opened: &gridcraft_model::Workbook, current: &gridcraft_model::Workbook) -> gridcraft_model::Workbook {
+    let mut wb = opened.clone();
+    for sh in &mut wb.sheets {
+        if let Some(now) = current.sheets.iter().find(|c| c.uid == sh.uid) {
+            let sh = std::sync::Arc::make_mut(sh);
+            sh.zoom = now.zoom;
+            sh.view = now.view;
+            sh.view_active = now.view_active;
+            sh.view_top_left = now.view_top_left;
+        }
+    }
+    if let Some(i) = current.active().and_then(|a| wb.sheets.iter().position(|s| s.uid == a.uid)) {
+        wb.set_active_sheet(i);
+    }
+    wb
+}
 
 /// Commands without an undo step that the viewer refuses all the same: they edit the workbook on
 /// a later step (Undo, Redo, Cut, starting a cell edit, the ink tools), change it without an undo

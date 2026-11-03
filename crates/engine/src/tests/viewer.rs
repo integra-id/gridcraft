@@ -39,6 +39,25 @@ fn content(wb: &Workbook) -> Workbook {
     wb
 }
 
+/// Every cell's stored content, by sheet: its formula, or its value when it has none. No viewer
+/// command may change it. Styles, widths, hidden rows and other view adjustments
+/// ([`viewer::VIEW`]) are left out, and so are formula results: `SUBTOTAL(109, …)` leaves out
+/// hidden rows, so it reads differently while rows are hidden or filtered out, as in Excel.
+fn values(wb: &Workbook) -> Vec<(String, CellRef, Value, Option<String>)> {
+    let mut all = wb
+        .sheets
+        .iter()
+        .flat_map(|sh| {
+            sh.cells.iter().filter(|(_, c)| c.value != Value::Empty || c.formula.is_some()).map(|(at, c)| match &c.formula {
+                Some(f) => (sh.name.clone(), at, Value::Empty, Some(f.text.clone())),
+                None => (sh.name.clone(), at, c.value.clone(), None),
+            })
+        })
+        .collect::<Vec<_>>();
+    all.sort_by(|a, b| (&a.0, a.1).cmp(&(&b.0, b.1)));
+    all
+}
+
 /// Commands the allowed-command sweep doesn't run: they open, close or switch workbooks and
 /// windows, write files, or need the interface.
 const SWEEP_SKIPS: &[&str] = &[
@@ -82,13 +101,23 @@ fn allowed_commands_dont_edit() {
     let before = content(&s.doc().unwrap().wb);
     let allowed: Vec<_> = command_specs().iter().filter(|c| !viewer::refuses(c) && !SWEEP_SKIPS.contains(&c.id)).collect();
     assert!(allowed.len() > 50, "only {} commands allowed", allowed.len());
+    let cells = values(&before);
     for spec in allowed {
+        let adjusts = viewer::VIEW.contains(&spec.id);
         for params in [json!({}), json!({"range": "B2:C4", "cell": "B2", "what": "a"})] {
             let _ = s.execute(spec.id, params);
             s.ui_requests.clear();
             assert_eq!(s.documents().len(), 1, "{} opened or closed a workbook", spec.id);
             let d = s.doc().unwrap();
-            assert!(content(&d.wb) == before, "{} changed the workbook", spec.id);
+            if adjusts {
+                // A view adjustment changes how the sheet shows, never a value or formula, and
+                // the workbook as opened stays as it was.
+                assert!(values(&d.wb) == cells, "{} changed a cell", spec.id);
+                assert!(d.as_opened.as_deref().is_none_or(|w| content(w) == before), "{} changed the workbook as opened", spec.id);
+            } else {
+                assert!(content(&d.wb) == before || d.as_opened.is_some(), "{} changed the workbook", spec.id);
+                assert!(values(&d.wb) == cells, "{} changed a cell", spec.id);
+            }
             assert!(d.undo.is_empty() && !d.is_dirty(), "{} edited (undo {}, dirty {})", spec.id, d.undo.len(), d.is_dirty());
         }
     }
@@ -148,6 +177,112 @@ fn viewer_saves_a_copy_and_keeps_its_file() {
     assert_eq!(a.sheets.len(), b.sheets.len());
     let at = CellRef::parse("B2").unwrap();
     assert_eq!(a.active().unwrap().value(at), b.active().unwrap().value(at));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The view adjustments a viewer makes: they last for the session.
+fn adjust(s: &mut Session) {
+    for (id, params) in [
+        ("home.columnWidth", json!({"cols": "B:B", "width": 300})),
+        ("home.rowHeight", json!({"rows": "2:2", "height": 60})),
+        ("home.autofitColumnWidth", json!({"cols": "C:C"})),
+        ("home.hideRows", json!({"rows": "5:6"})),
+        ("home.hideColumns", json!({"cols": "E:E"})),
+        ("home.wrapText", json!({"range": "B2:C4", "on": true})),
+        ("view.gridlines", json!({"on": false})),
+        ("view.headings", json!({"on": false})),
+        ("view.freezePanes", json!({"cell": "B5"})),
+    ] {
+        s.execute(id, params).unwrap_or_else(|e| panic!("{id}: {e}"));
+    }
+}
+
+#[test]
+fn view_adjustments_show_the_sheet_differently_and_keep_it_clean() {
+    let mut s = viewer_session();
+    let opened = s.doc().unwrap().wb.clone();
+    adjust(&mut s);
+    let d = s.doc().unwrap();
+    let sh = d.wb.active().unwrap();
+    assert!((sh.col_width(1) - 300.0).abs() < 1.0, "{}", sh.col_width(1));
+    assert!(sh.is_row_hidden(4) && sh.is_row_hidden(5) && sh.is_col_hidden(4));
+    assert!(!sh.show_gridlines && !sh.show_headings && sh.freeze.is_some());
+    let at = CellRef::parse("B2").unwrap();
+    assert!(d.wb.styles.get(sh.cell(at).map(|c| c.style).unwrap_or_default()).align.wrap);
+    // No value or formula changed, nothing to save or undo, and the workbook as opened is kept.
+    assert!(values(&d.wb) == values(&opened));
+    assert!(!d.is_dirty() && d.undo.is_empty() && d.redo.is_empty());
+    assert!(d.as_opened.as_ref().is_some_and(|w| Arc::ptr_eq(w, &opened)));
+    // Unhiding and unfreezing are view adjustments too.
+    s.execute("home.unhideRows", json!({"rows": "4:7"})).unwrap();
+    s.execute("view.unfreezePanes", json!({})).unwrap();
+    let sh = s.doc().unwrap().wb.active().unwrap().clone();
+    assert!(!sh.is_row_hidden(4) && sh.freeze.is_none());
+    // Editing is still refused, Sort and adding a filter too.
+    for (id, params) in [
+        ("cell.set", json!({"cell": "B2", "input": "x"})),
+        ("data.sortAscending", json!({"range": "B4:H10"})),
+        ("data.filter", json!({"range": "B4:H10"})),
+        ("home.bold", json!({"range": "B2"})),
+        ("home.insertRows", json!({"rows": "3:3"})),
+        ("edit.undo", json!({})),
+    ] {
+        assert!(matches!(s.execute(id, params), Err(EngineError::Disabled(..))), "{id} ran");
+    }
+    assert!(values(&s.doc().unwrap().wb) == values(&opened));
+}
+
+#[test]
+fn viewer_filters_rows_without_changing_them() {
+    let mut s = viewer_session();
+    let opened = s.doc().unwrap().wb.clone();
+    let Some(region) =
+        opened.active().unwrap().tables.first().map(|t| t.range).or_else(|| opened.active().unwrap().autofilter.as_ref().map(|a| a.range))
+    else {
+        panic!("the sales sample has a table or a filter")
+    };
+    s.execute("selection.set", json!({"range": CellRef::new(region.start.row, region.start.col).a1()})).unwrap();
+    let col = gridcraft_core::col_to_letters(region.start.col);
+    let first = opened.active().unwrap().value(CellRef::new(region.start.row + 1, region.start.col));
+    let Value::Text(first) = first else { panic!("{first:?}") };
+    s.execute("data.filterBy", json!({"column": col, "values": [first.to_string()]})).unwrap();
+    let sh = s.doc().unwrap().wb.active().unwrap().clone();
+    let hidden = (region.start.row + 1..=region.end.row).filter(|r| sh.is_row_hidden(*r)).count();
+    assert!(hidden > 0, "nothing filtered out");
+    assert!(values(&s.doc().unwrap().wb) == values(&opened));
+    assert!(!s.doc().unwrap().is_dirty() && s.doc().unwrap().undo.is_empty());
+    s.execute("data.clearFilter", json!({})).unwrap();
+    let sh = s.doc().unwrap().wb.active().unwrap().clone();
+    assert!((region.start.row + 1..=region.end.row).all(|r| !sh.is_row_hidden(r)));
+}
+
+#[test]
+fn copies_hold_the_workbook_as_opened() {
+    let dir = std::env::temp_dir().join(format!("gridcraft-viewer-view-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut s = viewer_session();
+    let opened = s.doc().unwrap().wb.clone();
+    adjust(&mut s);
+    s.execute("view.zoom", json!({"percent": 150})).unwrap();
+    s.execute("file.saveCopy", json!({"path": dir.join("copy.xlsx")})).unwrap();
+    s.execute("file.exportCsv", json!({"path": dir.join("copy.csv")})).unwrap();
+    // The session still shows its adjustments, and stays clean.
+    let d = s.doc().unwrap();
+    assert!(d.wb.active().unwrap().is_row_hidden(4) && !d.is_dirty() && d.undo.is_empty());
+
+    let mut check = Session::new();
+    check.execute("file.open", json!({"path": dir.join("copy.xlsx")})).unwrap();
+    let (a, b) = (opened.active().unwrap(), check.doc().unwrap().wb.active().unwrap().clone());
+    assert!((b.col_width(1) - a.col_width(1)).abs() < 1.0, "{} vs {}", b.col_width(1), a.col_width(1));
+    assert!(!b.is_row_hidden(4) && !b.is_col_hidden(4) && b.show_gridlines == a.show_gridlines && b.show_headings == a.show_headings);
+    assert_eq!(b.freeze, a.freeze);
+    let at = CellRef::parse("B2").unwrap();
+    let wrap = |wb: &Workbook, sh: &gridcraft_model::Sheet| wb.styles.get(sh.cell(at).map(|c| c.style).unwrap_or_default()).align.wrap;
+    assert_eq!(wrap(&check.doc().unwrap().wb, &b), wrap(&opened, a));
+    // Where the user is goes along: the zoom.
+    assert_eq!(b.zoom, 150);
+    let csv = std::fs::read_to_string(dir.join("copy.csv")).unwrap();
+    assert!(csv.lines().count() >= 10, "{csv}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

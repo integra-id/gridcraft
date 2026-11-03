@@ -225,6 +225,9 @@ pub struct DocState {
     /// The references `edit.goTo` with `record: true` went to in this document, newest first,
     /// without names, each area written with its sheet (`Sheet1!B14:C22,Sheet1!F19:G30`).
     pub go_to_recent: Vec<String>,
+    /// Viewer mode: the workbook as it was before the session's first view adjustment
+    /// ([`viewer::VIEW`]); copies and exports write it ([`viewer::COPIES`]). `None` until then.
+    pub as_opened: Option<Arc<Workbook>>,
 }
 
 static NEXT_UID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -331,6 +334,7 @@ impl DocState {
             touched: None,
             edits: None,
             go_to_recent: vec![],
+            as_opened: None,
         }
     }
     pub fn is_dirty(&self) -> bool {
@@ -669,8 +673,10 @@ impl Session {
     /// Panics inside commands are caught and reported; the workbook is restored.
     ///
     /// In viewer mode ([`Session::viewer`]) commands that edit are refused, and a workbook that
-    /// was clean stays clean: what the viewer runs (recalculation, zoom) changes no content, and
-    /// zoom's undo step is dropped (there is no Undo in a viewer).
+    /// was clean stays clean: what the viewer runs (recalculation, zoom and the other view
+    /// adjustments in [`viewer::VIEW`]) changes no value or formula, and their undo steps are
+    /// dropped (there is no Undo in a viewer). Copies and exports ([`viewer::COPIES`]) write the
+    /// workbook as it was before the first view adjustment ([`DocState::as_opened`]).
     pub fn execute(&mut self, id: &str, params: Json) -> Result<Json> {
         // A build without the editing commands is always a viewer (`viewer::EDITING_BUILD`).
         if !self.viewer && viewer::EDITING_BUILD {
@@ -680,11 +686,29 @@ impl Session {
         if viewer::refuses(spec) {
             return Err(EngineError::Disabled(id.to_string(), viewer::REASON.to_string()));
         }
-        let before: Vec<(u64, bool, usize)> = self.docs.iter().map(|d| (d.uid, d.is_dirty(), d.undo.len())).collect();
+        let before: Vec<(u64, bool, usize, Arc<Workbook>)> = self.docs.iter().map(|d| (d.uid, d.is_dirty(), d.undo.len(), d.wb.clone())).collect();
+        // A copy is written from the workbook as opened, without the view adjustments.
+        let mut shown = None;
+        if viewer::COPIES.contains(&id)
+            && let Some(d) = self.active_mut()
+            && let Some(opened) = d.as_opened.clone()
+        {
+            let copy = Arc::new(viewer::as_opened(&opened, &d.wb));
+            shown = Some((d.uid, std::mem::replace(&mut d.wb, copy)));
+        }
         let result = self.execute_command(id, params);
+        if let Some((uid, wb)) = shown
+            && let Some(d) = self.docs.iter_mut().find(|d| d.uid == uid)
+        {
+            d.wb = wb;
+        }
+        let adjusts = viewer::VIEW.contains(&id);
         for d in &mut self.docs {
-            if let Some(&(_, dirty, undo)) = before.iter().find(|b| b.0 == d.uid) {
-                d.undo.truncate(undo);
+            if let Some((_, dirty, undo, wb)) = before.iter().find(|b| b.0 == d.uid) {
+                d.undo.truncate(*undo);
+                if adjusts && d.as_opened.is_none() && !Arc::ptr_eq(wb, &d.wb) {
+                    d.as_opened = Some(wb.clone());
+                }
                 if !dirty && d.is_dirty() {
                     d.saved = d.wb.clone();
                 }
