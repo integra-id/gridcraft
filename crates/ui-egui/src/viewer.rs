@@ -42,7 +42,7 @@ pub const UI_EDITING: &[&str] = &["ui.ribbonTab", "view.collapseRibbon", "view.e
 
 /// Dialogs the viewer opens: finding, going to a cell, zoom, the command search and About. The
 /// File page's Open, Print, Export and Options open through `open_dialog` as well.
-pub const DIALOGS: &[&str] = &["find", "goTo", "zoom", "about", "commandSearch", "open", "options", "backstage", "saveAs"];
+pub const DIALOGS: &[&str] = &["find", "goTo", "zoom", "about", "commandSearch", "openPassword", "open", "options", "backstage", "saveAs"];
 
 /// The File page's (Backstage's) pages the viewer shows: no New, Info, Save As or Account.
 pub const BACKSTAGE_PAGES: &[crate::backstage::Page] =

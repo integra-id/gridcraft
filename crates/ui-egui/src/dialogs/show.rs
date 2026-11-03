@@ -181,6 +181,12 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                 return;
             }
             ui.set_min_width(width - 20.0);
+            // Without the editing interface only the viewer's dialogs open (`Dialog::open_viewing`),
+            // so the editor's forms below are dead code and left out of the build.
+            if !crate::viewer::EDITOR {
+                viewing(app, ui, &mut d, &mut confirm, &mut open);
+                return;
+            }
             match d.name.as_str() {
                 "formatCells" => format_cells(app, ui, &mut d, &mut confirm),
                 "dataValidation" => data_validation_form(app, ui, &mut d, &mut confirm, &mut open),
@@ -482,6 +488,18 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
         app.dialog = Some(d);
     } else if let Some(back) = d.back.take() {
         app.dialog = Some(*back);
+    }
+}
+
+/// The body of a GridCraft Viewer dialog (`Dialog::open_viewing`).
+fn viewing(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool, open: &mut bool) {
+    match d.name.as_str() {
+        "find" => find(app, ui, d),
+        "goTo" => go_to(app, ui, d, confirm),
+        "zoom" => zoom(ui, d, confirm, open),
+        "commandSearch" => command_search(app, ui, d, confirm),
+        "about" => about(ui, d),
+        _ => form(app, ui, d, confirm, open),
     }
 }
 

@@ -255,13 +255,80 @@ impl Dialog {
         }
     }
 
+    /// The dialogs GridCraft Viewer opens (`viewer::DIALOGS` that are dialogs): Zoom, Find, Go To,
+    /// command search, About and a protected workbook's password.
+    fn open_viewing(app: &mut SheetApp, name: &str, params: &Json) -> Option<Dialog> {
+        let p = |k: &str| params.get(k).cloned().unwrap_or(Json::Null);
+        let d = match name {
+            "zoom" => {
+                // The current zoom is pre-selected (Custom when it matches no preset). Fit
+                // selection needs the grid's size, so it is captured here for `view.zoomToSelection`.
+                let zoom = app.session.active().and_then(|d| d.wb.active().map(|s| s.zoom)).unwrap_or(100);
+                let view = app.grid.cells_rect.unwrap_or(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), vec2(1200.0, 700.0)));
+                Dialog::form(
+                    "zoom",
+                    "Zoom",
+                    "view.zoom",
+                    vec![],
+                    json!({"percent": zoom, "preset": zoom_preset(zoom as f64), "viewWidth": view.width(), "viewHeight": view.height()}),
+                )
+            }
+            "find" => {
+                let title = if app.is_viewer() { "Find" } else { "Find and Replace" };
+                let mut d = Dialog::custom("find", title, json!({"what": "", "with": "", "within": "sheet", "lookIn": "formulas"}));
+                d.tab = if p("replace").as_bool() == Some(true) { "Replace".into() } else { "Find".into() };
+                d
+            }
+            "goTo" => {
+                let mut dialog = Dialog::custom("goTo", "Go To", json!({"reference": ""}));
+                // Listed once, when the dialog opens.
+                dialog.result = Some(json!(go_to_entries(app)));
+                dialog
+            }
+            "commandSearch" => Dialog::custom("commandSearch", "Search Commands", json!({})),
+            "about" => {
+                let mut d = Dialog::custom("about", "About GridCraft", json!({}));
+                d.tab = match p("tab").as_str() {
+                    Some(t @ ("Contributors" | "Models")) => t.to_string(),
+                    _ => "About".into(),
+                };
+                d
+            }
+            "openPassword" => {
+                // The file rides along in the values (`path` on the desktop, `name` and `base64`
+                // on the web) and goes back to `file.open` with the password.
+                let source = p("path").as_str().or(p("name").as_str()).map(str::to_string).unwrap_or_default();
+                let file = std::path::Path::new(&source).file_name().and_then(std::ffi::OsStr::to_str).unwrap_or("This workbook").to_string();
+                // An empty password from the start, so OK on the untouched field says "incorrect"
+                // rather than asking for the password again.
+                let mut values = params.clone();
+                values["password"] = json!("");
+                Dialog::form(
+                    "openPassword",
+                    "Password",
+                    "file.open",
+                    vec![Field::Note(format!("'{file}' is protected.")), Field::Password { key: "password", label: "Password:" }],
+                    values,
+                )
+            }
+            _ => return None,
+        };
+        Some(d)
+    }
+
     /// Opens the named dialog with defaults from the active workbook, including a cell's stored hyperlink.
     pub fn open(app: &mut SheetApp, name: &str, params: Json) -> Option<Dialog> {
         let sel = app.session.active().map(|d| d.selection.current().a1()).unwrap_or_default();
         let active = app.session.active().map(|d| d.selection.active.a1()).unwrap_or_default();
         let p = |k: &str| params.get(k).cloned().unwrap_or(Json::Null);
         use Field::*;
+        // Without the editing interface only the viewer's dialogs exist: the rest of this match
+        // is dead code and left out of the build.
+        if !crate::viewer::EDITOR {
+            return Self::open_viewing(app, name, &params);
+        }
         let d = match name {
+            "zoom" | "find" | "goTo" | "commandSearch" | "about" | "openPassword" => return Self::open_viewing(app, name, &params),
             "insertCells" => Dialog::form(
                 "insertCells",
                 "Insert",
@@ -427,23 +494,6 @@ impl Dialog {
                 vec![Password { key: "password", label: "Password:" }],
                 json!({"on": false}),
             ),
-            "openPassword" => {
-                // The file rides along in the values (`path` on the desktop, `name` and `base64`
-                // on the web) and goes back to `file.open` with the password.
-                let source = p("path").as_str().or(p("name").as_str()).map(str::to_string).unwrap_or_default();
-                let file = std::path::Path::new(&source).file_name().and_then(std::ffi::OsStr::to_str).unwrap_or("This workbook").to_string();
-                // An empty password from the start, so OK on the untouched field says "incorrect"
-                // rather than asking for the password again.
-                let mut values = params.clone();
-                values["password"] = json!("");
-                Dialog::form(
-                    "openPassword",
-                    "Password",
-                    "file.open",
-                    vec![Note(format!("'{file}' is protected.")), Password { key: "password", label: "Password:" }],
-                    values,
-                )
-            }
             "unprotectSheet" => Dialog::form(
                 "unprotectSheet",
                 "Unprotect Sheet",
@@ -781,19 +831,6 @@ impl Dialog {
                     json!({"summaryBelow": below, "summaryRight": right}),
                 )
             }
-            "zoom" => {
-                // The current zoom is pre-selected (Custom when it matches no preset). Fit
-                // selection needs the grid's size, so it is captured here for `view.zoomToSelection`.
-                let zoom = app.session.active().and_then(|d| d.wb.active().map(|s| s.zoom)).unwrap_or(100);
-                let view = app.grid.cells_rect.unwrap_or(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), vec2(1200.0, 700.0)));
-                Dialog::form(
-                    "zoom",
-                    "Zoom",
-                    "view.zoom",
-                    vec![],
-                    json!({"percent": zoom, "preset": zoom_preset(zoom as f64), "viewWidth": view.width(), "viewHeight": view.height()}),
-                )
-            }
             "defineName" => {
                 // Name Manager › Edit… passes the name being edited (`oldName`, `oldScope`) and
                 // its current fields; New… and Define Name start from the selection.
@@ -926,18 +963,6 @@ impl Dialog {
                 d.focus_first_field = true;
                 d
             }
-            "find" => {
-                let title = if app.is_viewer() { "Find" } else { "Find and Replace" };
-                let mut d = Dialog::custom("find", title, json!({"what": "", "with": "", "within": "sheet", "lookIn": "formulas"}));
-                d.tab = if p("replace").as_bool() == Some(true) { "Replace".into() } else { "Find".into() };
-                d
-            }
-            "goTo" => {
-                let mut dialog = Dialog::custom("goTo", "Go To", json!({"reference": ""}));
-                // Listed once, when the dialog opens.
-                dialog.result = Some(json!(go_to_entries(app)));
-                dialog
-            }
             "pivotCalculatedField" => Dialog::form(
                 "pivotCalculatedField",
                 "Insert Calculated Field",
@@ -989,16 +1014,7 @@ impl Dialog {
                 dialog
             }
             "manageRules" => Dialog::custom("manageRules", "Conditional Formatting Rules Manager", json!({})),
-            "commandSearch" => Dialog::custom("commandSearch", "Search Commands", json!({})),
             "agents" => Dialog::custom("agents", "Agent Control", json!({})),
-            "about" => {
-                let mut d = Dialog::custom("about", "About GridCraft", json!({}));
-                d.tab = match p("tab").as_str() {
-                    Some(t @ ("Contributors" | "Models")) => t.to_string(),
-                    _ => "About".into(),
-                };
-                d
-            }
             "recommendedCharts" => {
                 // Insert › Recommended Charts: chart types for the selected data, with previews.
                 let recs = match app.session.run("insert.chartRecommendations", json!({})) {
