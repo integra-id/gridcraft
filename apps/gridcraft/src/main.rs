@@ -1,6 +1,11 @@
 //! GridCraft desktop app, built as GridCraft Viewer (read-only workbooks).
 //!
-//! Usage: `gridcraft [--control <port> [--control-token <token>]] [--sample <name>] [files…]`
+//! Usage: `gridcraft [--control <port> [--control-token <token>]] [--sample <name>]
+//! [--hide=<features>] [--disable=<features>] [files…]`
+//!
+//! `--hide=open,export,print` leaves those features out and `--disable=pdf` greys them out, with
+//! their shortcuts turned off too (comma-separated names, any case; `--hide open` works as well;
+//! a feature in both is hidden). See `gridcraft_ui_egui::Features` and `docs/viewer.md`.
 //!
 //! `--control <port>` (or `GRIDCRAFT_CONTROL_PORT`) starts a localhost JSON-lines control
 //! server: `{"id":1,"method":"ui.inspect","params":{}}` → `{"id":1,"ok":true,"result":…}`.
@@ -51,8 +56,12 @@ impl eframe::App for App {
     /// Forwards raw input to the shared app, then opens every non-empty dropped file path as a workbook.
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
         self.0.raw_input_hook(ctx, raw);
-        // Files dropped on the window open as workbooks.
-        for f in std::mem::take(&mut raw.dropped_files) {
+        // Files dropped on the window open as workbooks, unless `--hide=drop` or `--disable=drop`.
+        let dropped = std::mem::take(&mut raw.dropped_files);
+        if dropped.is_empty() || !self.0.feature_allowed(gridcraft_ui_egui::Feature::Drop) {
+            return;
+        }
+        for f in dropped {
             if let Some(p) = f.path().to_str().map(str::to_string).filter(|p| !p.is_empty()) {
                 self.0.open_path(&p);
             }
@@ -233,6 +242,20 @@ fn icon() -> Option<egui::IconData> {
     Some(egui::IconData { width: img.width(), height: img.height(), rgba: img.into_raw() })
 }
 
+/// `--hide=LIST`, `--hide LIST`, `--disable=LIST` or `--disable LIST`: whether it hides (else
+/// disables), the list, and whether the list was the next argument.
+fn feature_flag(arg: &str, next: Option<&String>) -> Option<(bool, String, bool)> {
+    for (flag, hides) in [("--hide", true), ("--disable", false)] {
+        if arg == flag {
+            return Some((hides, next.cloned().unwrap_or_default(), next.is_some()));
+        }
+        if let Some(list) = arg.strip_prefix(flag).and_then(|rest| rest.strip_prefix('=')) {
+            return Some((hides, list.to_string(), false));
+        }
+    }
+    None
+}
+
 fn main() -> eframe::Result<()> {
     // First, so the panic hook and every start-up warning are recorded (`logging`).
     let logger = logging::install();
@@ -271,8 +294,18 @@ fn main() -> eframe::Result<()> {
     let mut control_token: Option<String> = std::env::var("GRIDCRAFT_CONTROL_TOKEN").ok();
     let mut sample: Option<String> = None;
     let mut files: Vec<String> = Vec::new();
+    let (mut hide, mut disable) = (Vec::new(), Vec::new());
     let mut i = 0;
     while i < args.len() {
+        if let Some((hides, list, took_next)) = feature_flag(&args[i], args.get(i + 1)) {
+            if hides {
+                hide.push(list)
+            } else {
+                disable.push(list)
+            }
+            i += if took_next { 2 } else { 1 };
+            continue;
+        }
         match args[i].as_str() {
             "--control" => {
                 i += 1;
@@ -315,6 +348,9 @@ fn main() -> eframe::Result<()> {
     // command that edits (`gridcraft_engine::viewer`). Set after the sample, which `file.new` makes.
     session.viewer = true;
     let mut app = SheetApp::new(session, services());
+    if !hide.is_empty() || !disable.is_empty() {
+        app.features = gridcraft_ui_egui::Features::parse_logged(Some(&hide.join(",")), Some(&disable.join(",")), "--hide/--disable");
+    }
     app.watch_desktop_theme();
     app.start_update_check();
     let control_port = control_port;
@@ -450,5 +486,21 @@ mod packaging_tests {
         for ext in &mac {
             assert!(FileKind::from_path(&format!("book.{ext}")).is_some(), "GridCraft doesn't open .{ext}");
         }
+    }
+}
+
+#[cfg(test)]
+mod feature_flag_tests {
+    use super::feature_flag;
+
+    #[test]
+    fn hide_and_disable_take_a_list_after_an_equals_sign_or_as_the_next_argument() {
+        let next = "pdf".to_string();
+        assert_eq!(feature_flag("--hide=open,print", None), Some((true, "open,print".into(), false)));
+        assert_eq!(feature_flag("--disable=PDF", Some(&next)), Some((false, "PDF".into(), false)));
+        assert_eq!(feature_flag("--disable", Some(&next)), Some((false, "pdf".into(), true)));
+        assert_eq!(feature_flag("--hide", None), Some((true, String::new(), false)));
+        assert_eq!(feature_flag("--hidden=open", None), None);
+        assert_eq!(feature_flag("book.xlsx", Some(&next)), None);
     }
 }
