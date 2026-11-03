@@ -109,7 +109,9 @@ pub fn start() {
         if let Some(el) = document.get_element_by_id(LOADING_ID) {
             match result {
                 Ok(()) => el.remove(),
-                Err(e) => el.set_inner_html(&format!("<p>GridCraft Viewer failed to start: {e:?}</p><p>A browser with WebGPU or WebGL2 is required.</p>")),
+                Err(e) => {
+                    el.set_inner_html(&format!("<p>GridCraft Viewer failed to start: {e:?}</p><p>A browser with WebGPU or WebGL2 is required.</p>"))
+                }
             }
         }
     });
