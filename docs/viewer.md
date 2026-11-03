@@ -82,7 +82,17 @@ open the window shows *GridCraft Viewer* and an **Open a workbook…** button. T
   off for the web app. Without it `viewer::EDITOR` is false, `SheetApp::new` always puts the
   session in viewer mode and `is_viewer()` is constant, so the editor-only branches are dead code
   and left out of the wasm: the ribbon, the title bar, keytips, the formula bar, every dialog but
-  the viewer's (`Dialog::open_viewing`) and the File pages the viewer hides.
+  the viewer's (`Dialog::open_viewing`) and the File pages the viewer hides. The macro step
+  editor, macro prompts and debugging status, the code editor (Python and formula fields) and
+  the in-cell editor are left out the same way (`viewer::EDITOR` checks where they are called).
+- **The `macros` feature** of `gridcraft-engine` (on by default, and for the desktop app, CLI, MCP
+  and the `editor` feature) is the macro runtime: running, checking, recording and debugging.
+  The web viewer builds without it. `macro.run`, `macro.check`, `macro.record` and `macro.debug`
+  are still in the command list, but they refuse with `macros::NO_RUNTIME` (`macros::RUNTIME` is
+  false), so the runner, recorder and debugger are left out of the wasm. Macros only run when
+  someone runs them, never to compute a value, so a workbook shows the same without the
+  runtime. Its macros are still read and are kept in an exported `.xlsx` copy. Tests:
+  `cargo test -p gridcraft-engine --no-default-features` covers the refusal.
 - **Desktop app** (`apps/gridcraft`): sets `session.viewer = true` after any `--sample` (made
   with `file.new`) and titles the window *GridCraft Viewer*.
 - **Web app** (`apps/gridcraft-web`): the same, with the page title *GridCraft Viewer*.
