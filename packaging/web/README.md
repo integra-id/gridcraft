@@ -20,8 +20,8 @@ There is no server-side code. Upload the folder's contents anywhere that serves 
 
 `trunk build --release` builds with `[profile.web]` in the root `Cargo.toml` (`opt-level = "z"`,
 fat LTO, one codegen unit, `strip`, `panic = "abort"`), runs `wasm-opt -Oz`, and builds
-`gridcraft-ui-egui` without its `editor` feature and `gridcraft-engine` without its `macros`
-feature. Measured on 2026-11-03 (wasm-opt 120, trunk
+`gridcraft-ui-egui` without its `editor` feature and `gridcraft-engine` without its `editing` and
+`macros` features. Measured on 2026-11-03 (wasm-opt 120, trunk
 0.22.1):
 
 | Build | wasm raw | wasm gzip -9 | wasm Brotli 11 | js raw / gzip / Brotli |
@@ -30,10 +30,11 @@ feature. Measured on 2026-11-03 (wasm-opt 120, trunk
 | + `[profile.web]` | 14.43 MB | 5.62 MB | 4.16 MB | 170 / 24 / 20 KB |
 | + without the `editor` feature (no ribbon, title bar, keytips or formula bar) | 13.97 MB | 5.44 MB | 4.05 MB | 170 / 24 / 20 KB |
 | + only the viewer's dialogs and File pages | 13.72 MB | 5.35 MB | 3.99 MB | 170 / 24 / 20 KB |
-| + no macro editor, code editor or cell editor, and no macro runtime (this branch) | **13.42 MB** | **5.21 MB** | **3.89 MB** | 170 / 24 / 20 KB |
+| + no macro editor, code editor or cell editor, and no macro runtime | 13.42 MB | 5.21 MB | 3.89 MB | 170 / 24 / 20 KB |
+| + no editing commands in the engine (this branch) | **12.25 MB** | **4.73 MB** | **3.59 MB** | 170 / 24 / 20 KB |
 
-Brotli is what a browser downloads from a host that serves the `.br` copies: 3.89 MB in place of
-5.73 MB (−32%). That is −44% raw and −40% gzip. No fonts are duplicated. The 1.4 MB of
+Brotli is what a browser downloads from a host that serves the `.br` copies: 3.59 MB in place of
+5.73 MB (−37%). That is −49% raw and −46% gzip. No fonts are duplicated. The 1.4 MB of
 embedded faces are egui's defaults and its monochrome emoji, which the UI needs for its symbols.
 
 ## Any path works

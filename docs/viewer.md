@@ -93,10 +93,27 @@ open the window shows *GridCraft Viewer* and an **Open a workbook…** button. T
   someone runs them, never to compute a value, so a workbook shows the same without the
   runtime. Its macros are still read and are kept in an exported `.xlsx` copy. Tests:
   `cargo test -p gridcraft-engine --no-default-features` covers the refusal.
+- **The `editing` feature** of `gridcraft-engine` (on by default, and for the desktop app, CLI,
+  MCP, xtask and the `editor` feature) is the code of the editing commands. The web viewer builds
+  without it. Every command keeps its place in the command list (name, label, shortcut, keytips),
+  but each one viewer mode refuses runs `viewer::left_out` instead of its own code
+  (`cmd::run_if_kept!`, chosen at compile time from `viewer::EDITING_BUILD`), so its code is left
+  out of the wasm. `Session::execute` refuses them with `Disabled(id, viewer::REASON)`, the toast
+  viewer mode shows, whether or not `session.viewer` is set; a nested run of one gets the
+  same reason. The commands viewer mode allows (navigation, selection, copy, Find, Go To, sheet
+  switching, zoom, export, print, `file.saveCopy`/`file.saveBytes`) are kept.
+  Samples are built by replaying editing commands, so a build without the feature reads them from
+  stored copies (`crates/engine/samples/*.json`); `sample::open` opens one, and the test
+  `stored_samples_match_the_replay` keeps the copies equal to the replay
+  (`GRIDCRAFT_BLESS_SAMPLES=1 cargo test -p gridcraft-engine stored_samples` rewrites them).
+  Tests that edit are gated on the feature; `crates/engine/src/read_only_tests.rs` runs without
+  it and covers the refusal, the kept commands, the samples, export, and an `.xlsx` copy keeping
+  the workbook's macros. `cargo xtask viewer-engine` (part of `cargo xtask ci`) runs clippy and
+  these tests without default features.
 - **Desktop app** (`apps/gridcraft`): sets `session.viewer = true` after any `--sample` (made
   with `file.new`) and titles the window *GridCraft Viewer*.
-- **Web app** (`apps/gridcraft-web`): the same, with the page title *GridCraft Viewer*.
-  `?sample=` still opens a sample.
+- **Web app** (`apps/gridcraft-web`): sets `session.viewer = true`, then opens any `?sample=`
+  with `sample::open` (`file.new` is an editing command), with the page title *GridCraft Viewer*.
 
 ## Download size (web)
 
