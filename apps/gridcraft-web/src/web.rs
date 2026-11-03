@@ -5,6 +5,8 @@ use gridcraft_ui_egui::{Inbox, Services, SheetApp};
 use wasm_bindgen::JsCast as _;
 use wasm_bindgen::JsValue;
 
+mod open_url;
+
 const CANVAS_ID: &str = "gridcraft_canvas";
 const LOADING_ID: &str = "gridcraft_loading";
 
@@ -41,6 +43,9 @@ pub fn start() {
         // workbooks in it and stores what it saves (`host`).
         let bridge = if query_param("host").as_deref() == Some("parent") { crate::host::Bridge::new() } else { None };
         let app_bridge = bridge.clone();
+        // `?url=` (or its alias `?src=`): a workbook to fetch and open (`open_url`). Not in host
+        // mode, where the parent sends the workbook.
+        let address = if bridge.is_none() { crate::url_open::requested(query_param("url"), query_param("src")) } else { None };
         let result = eframe::WebRunner::new()
             .start(
                 canvas,
@@ -48,8 +53,9 @@ pub fn start() {
                 Box::new(move |cc| {
                     let inbox: Inbox = Inbox::default();
                     let mut session = Session::new();
-                    // In host mode the parent sends the workbook to edit; no sample meanwhile.
-                    let q = if app_bridge.is_some() { String::new() } else { query() };
+                    // In host mode the parent sends the workbook to edit, and `?url=` names one to
+                    // fetch: no sample meanwhile.
+                    let q = if app_bridge.is_some() || address.is_some() { String::new() } else { query() };
                     // GridCraft Viewer: the engine refuses every command that edits. `file.new` is one,
                     // so the sample opens without it.
                     session.viewer = true;
@@ -99,7 +105,9 @@ pub fn start() {
                         }
                         bridge.post_ready();
                     }
-                    Ok(Box::new(WebShell { app, inbox, bridge: app_bridge, prefs }))
+                    let url_open =
+                        address.as_deref().map(|a| open_url::UrlOpen::start(a, query_param("name").as_deref(), inbox.clone(), cc.egui_ctx.clone()));
+                    Ok(Box::new(WebShell { app, inbox, bridge: app_bridge, prefs, url_open }))
                 }),
             )
             .await;
@@ -130,6 +138,8 @@ struct WebShell {
     inbox: Inbox,
     bridge: Option<crate::host::Bridge>,
     prefs: crate::prefs::PrefsSync,
+    /// `?url=`: the workbook being fetched and opened.
+    url_open: Option<open_url::UrlOpen>,
 }
 
 fn local_storage() -> Option<web_sys::Storage> {
@@ -159,6 +169,9 @@ impl eframe::App for WebShell {
             });
         }
         self.app.logic(ctx);
+        if let Some(open) = &self.url_open {
+            open.after_logic(&mut self.app);
+        }
         // Store changed preferences straight away: a reload or closed tab runs no exit code (#1562).
         let changed = self.prefs.changed(&self.app);
         if !changed.is_empty() {
@@ -182,6 +195,9 @@ impl eframe::App for WebShell {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.app.ui(ui);
+        if let Some(open) = &self.url_open {
+            open.show(ui.ctx());
+        }
         if let Some(bridge) = &self.bridge {
             bridge.sync(&mut self.app);
         }

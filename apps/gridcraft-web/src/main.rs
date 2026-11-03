@@ -9,6 +9,7 @@
 //! files are read asynchronously.
 //!
 //! URL query flags: `?webgl` forces WebGL2; `?sample=sales|budget|grades` opens a sample;
+//! `?url=ADDRESS` (alias `?src=`, optional `&name=`) fetches a workbook and opens it (`url_open`);
 //! `?host=parent` (inside an `<iframe>`) talks to a same-origin parent page instead: it sends the
 //! workbook to open and stores what GridCraft saves (`host`), and `&author=` names the user for
 //! notes and comments. `?chrome=none|notitlebar|nofiletab` leaves the title bar and/or the File tab
@@ -20,6 +21,8 @@
 mod host;
 #[cfg(any(target_arch = "wasm32", test))]
 mod prefs;
+#[cfg(any(target_arch = "wasm32", test))]
+mod url_open;
 #[cfg(target_arch = "wasm32")]
 mod web;
 
