@@ -9,6 +9,9 @@
 //!   as PDF. The parent stores it and reports failures itself.
 //! - `gridcraft:dirty` (to the parent): `{ dirty }` whenever unsaved changes appear or go away.
 //! - `gridcraft:failed` (to the parent): `{ error }` when the app couldn't start.
+//! - `gridcraft:config` (from the parent): `{ hide, disable }`, each a comma-separated string
+//!   or an array of feature names, as `?hide=` and `?disable=` take them. It replaces the
+//!   features the page started with (a missing list shows those features again).
 //!
 //! Only the parent window on the page's own origin is heard or answered. In host mode the page
 //! starts with an empty workbook instead of a sample, and the parent guards leaving the page.
@@ -37,6 +40,8 @@ pub struct Bridge {
     saved: Rc<RefCell<Vec<String>>>,
     /// The unsaved-changes state last reported to the parent.
     reported: Rc<Cell<Option<bool>>>,
+    /// The `hide` and `disable` lists of the last `gridcraft:config`, not yet applied.
+    config: Rc<RefCell<Option<(String, String)>>>,
 }
 
 impl Bridge {
@@ -48,7 +53,7 @@ impl Bridge {
             return None;
         }
         let origin = window.location().origin().ok()?;
-        Some(Self { window, parent, origin, saved: Rc::default(), reported: Rc::default() })
+        Some(Self { window, parent, origin, saved: Rc::default(), reported: Rc::default(), config: Rc::default() })
     }
 
     /// Send saved and exported files to the parent instead of downloading them, and hear files
@@ -82,6 +87,9 @@ impl Bridge {
     /// After each frame: a workbook handed to the parent this frame counts as saved under the
     /// name it was saved as, and the parent hears when unsaved changes appear or go away.
     pub fn sync(&self, app: &mut SheetApp) {
+        if let Some((hide, disable)) = self.config.borrow_mut().take() {
+            app.features = gridcraft_ui_egui::Features::parse_logged(Some(&hide), Some(&disable), "gridcraft:config");
+        }
         let saved = std::mem::take(&mut *self.saved.borrow_mut());
         if let Some(name) = saved.iter().rev().find(|name| is_workbook(name))
             && let Some(doc) = app.session.active_mut()
@@ -112,13 +120,20 @@ impl Bridge {
     fn listen(&self, inbox: Inbox, ctx: egui::Context) {
         let parent = self.parent.clone();
         let origin = self.origin.clone();
+        let config = self.config.clone();
         let on_message = Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |event: web_sys::MessageEvent| {
             if event.origin() != origin || !event.source().is_some_and(|s| js_sys::Object::is(&s, &parent)) {
                 return;
             }
             let data = event.data();
-            if string(&data, "type").as_deref() != Some("gridcraft:open") {
-                return;
+            match string(&data, "type").as_deref() {
+                Some("gridcraft:open") => {}
+                Some("gridcraft:config") => {
+                    *config.borrow_mut() = Some((list(&data, "hide"), list(&data, "disable")));
+                    ctx.request_repaint();
+                    return;
+                }
+                _ => return,
             }
             let name = string(&data, "name").filter(|n| !n.trim().is_empty()).unwrap_or_else(|| "Book.xlsx".to_string());
             let Some(bytes) = bytes(&data) else { return };
@@ -151,6 +166,19 @@ fn message(fields: &[(&str, JsValue)]) -> Option<js_sys::Object> {
 
 fn string(data: &JsValue, key: &str) -> Option<String> {
     js_sys::Reflect::get(data, &JsValue::from_str(key)).ok()?.as_string()
+}
+
+/// A feature list: a comma-separated string, or an array of names; empty when missing.
+fn list(data: &JsValue, key: &str) -> String {
+    let Ok(value) = js_sys::Reflect::get(data, &JsValue::from_str(key)) else { return String::new() };
+    if let Some(text) = value.as_string() {
+        return text;
+    }
+    if js_sys::Array::is_array(&value) {
+        let names: Vec<String> = js_sys::Array::from(&value).iter().filter_map(|v| v.as_string()).collect();
+        return names.join(",");
+    }
+    String::new()
 }
 
 /// `bytes` as an `ArrayBuffer` or `Uint8Array`.

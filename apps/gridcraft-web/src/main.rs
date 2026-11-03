@@ -13,7 +13,9 @@
 //! `?host=parent` (inside an `<iframe>`) talks to a same-origin parent page instead: it sends the
 //! workbook to open and stores what GridCraft saves (`host`), and `&author=` names the user for
 //! notes and comments. `?chrome=none|notitlebar|nofiletab` leaves the title bar and/or the File tab
-//! undrawn for a host that embeds the sheet in its own window (see `Chrome`). Preferences (theme,
+//! undrawn for a host that embeds the sheet in its own window (see `Chrome`).
+//! `?hide=open,export,print&disable=pdf` hides or greys out viewer features (see `Features`;
+//! `gridcraft:config` from a host parent does the same later). Preferences (theme,
 //! interface size, editing options…) are kept in `localStorage` (`prefs`).
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 

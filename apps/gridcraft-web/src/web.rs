@@ -81,6 +81,12 @@ pub fn start() {
                             _ => {}
                         }
                     }
+                    // `?hide=open,print&disable=pdf`: features an embedder hides or greys out
+                    // (`Features`); unknown names are ignored with a console warning.
+                    let (hide, disable) = (query_param("hide"), query_param("disable"));
+                    if hide.is_some() || disable.is_some() {
+                        app.features = gridcraft_ui_egui::Features::parse_logged(hide.as_deref(), disable.as_deref(), "?hide=/?disable=");
+                    }
                     // Follow the browser's language, except a CJK one. CJK coverage comes from
                     // optional craft-fonts input, not a guaranteed web font set, so a CJK browser
                     // cannot be assumed to render localized labels without tofu. Users can still
@@ -153,7 +159,11 @@ fn stored(key: &str) -> Option<String> {
 
 impl eframe::App for WebShell {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let dropped = ctx.input_mut(|i| std::mem::take(&mut i.raw.dropped_files));
+        let mut dropped = ctx.input_mut(|i| std::mem::take(&mut i.raw.dropped_files));
+        // Dropping files opens them, unless the embedder turned that off (`?hide=drop`).
+        if !dropped.is_empty() && !self.app.feature_allowed(gridcraft_ui_egui::Feature::Drop) {
+            dropped.clear();
+        }
         for f in dropped {
             let inbox = self.inbox.clone();
             let ctx = ctx.clone();
