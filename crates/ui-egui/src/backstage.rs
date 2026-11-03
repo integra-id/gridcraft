@@ -355,13 +355,14 @@ fn new_tiles(app: &mut SheetApp, ui: &mut Ui, out: &mut Outcome) {
     let lang = app.ui.language;
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = vec2(18.0, 14.0);
-        if tile(ui, lang.tr("Blank workbook"), None).clicked() {
+        // The viewer makes no new workbooks, but opens the samples to look at.
+        if !app.is_viewer() && tile(ui, lang.tr("Blank workbook"), None).clicked() {
             app.run_or_alert("file.new", json!({}));
             out.close = true;
         }
         for (i, (name, title)) in gridcraft_engine::sample::SAMPLES.iter().enumerate() {
             if tile(ui, title, Some(i)).clicked() {
-                app.run_or_alert("file.new", json!({"sample": name}));
+                crate::viewer::open_sample(app, name);
                 out.close = true;
             }
         }
@@ -592,6 +593,12 @@ fn open_page(app: &mut SheetApp, ui: &mut Ui, bs: &mut Backstage, out: &mut Outc
     ui.add_space(22.0);
     section(ui, lang, "Recent");
     recent_list(app, ui, bs, out, usize::MAX);
+    // The viewer has no New page: its samples open from here.
+    if app.is_viewer() {
+        ui.add_space(22.0);
+        section(ui, lang, "Samples");
+        new_tiles(app, ui, out);
+    }
 }
 
 /// Review › Protect Workbook and File › Info › Protect Workbook: the protect dialog (with an

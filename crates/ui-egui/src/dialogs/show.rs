@@ -355,13 +355,13 @@ pub fn show(app: &mut SheetApp, ctx: &egui::Context) {
                 "start" => {
                     ui.heading("Start a new workbook");
                     ui.horizontal_wrapped(|ui| {
-                        if ui.button("Blank workbook").clicked() {
+                        if !app.is_viewer() && ui.button("Blank workbook").clicked() {
                             app.run_or_alert("file.new", json!({}));
                             open = false;
                         }
                         for (n, t) in gridcraft_engine::sample::SAMPLES {
                             if ui.button(*t).clicked() {
-                                app.run_or_alert("file.new", json!({"sample": n}));
+                                crate::viewer::open_sample(app, n);
                                 open = false;
                             }
                         }

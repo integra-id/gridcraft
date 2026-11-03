@@ -85,6 +85,22 @@ pub fn placeholder(app: &SheetApp) -> bool {
         && d.wb.sheets.iter().all(|sh| sh.cells.is_empty() && sh.charts.is_empty() && sh.images.is_empty())
 }
 
+/// Opens built-in sample `name`: `file.new {sample}` in the editor. The viewer, which refuses
+/// `file.new`, opens the engine's copy of it as it opens a file: read-only, in place of the blank
+/// workbook it keeps when nothing is open.
+pub fn open_sample(app: &mut SheetApp, name: &str) {
+    if !app.is_viewer() {
+        app.run_or_alert("file.new", json!({"sample": name}));
+        return;
+    }
+    let blank = (placeholder(app) && app.session.documents().len() == 1).then(|| app.session.active_index());
+    if gridcraft_engine::sample::open(&mut app.session, name).is_none() {
+        app.toast = Some((format!("Unknown sample: {name}"), crate::now_ms()));
+    } else if let Some(i) = blank {
+        app.session.close_document(i);
+    }
+}
+
 /// The window title: the workbook's name, then the app's.
 pub fn window_title(app: &SheetApp) -> String {
     match app.session.active() {
@@ -334,6 +350,21 @@ mod tests {
     /// Buttons 8 px per letter wide, as `small_button` lays them out (24 px of icon, 6 of gap).
     fn width(label: &str, dropdown: bool) -> f32 {
         24.0 + if label.is_empty() { 0.0 } else { label.len() as f32 * 8.0 + 6.0 } + if dropdown { 12.0 } else { 0.0 }
+    }
+
+    #[test]
+    fn a_sample_opens_in_place_of_the_blank_window() {
+        let mut app = viewer_app();
+        assert!(placeholder(&app));
+        open_sample(&mut app, "sales");
+        assert_eq!(app.session.documents().len(), 1, "the sample takes the blank workbook's place");
+        assert!(!placeholder(&app) && app.toast.is_none());
+        // A second sample opens beside it.
+        open_sample(&mut app, "budget");
+        assert_eq!(app.session.documents().len(), 2);
+        open_sample(&mut app, "nope");
+        assert_eq!(app.session.documents().len(), 2);
+        assert!(app.toast.as_ref().is_some_and(|(t, _)| t.contains("nope")));
     }
 
     #[test]

@@ -39,9 +39,13 @@ ribbon and the formula bar:
 - In the centre: the workbook's name and a green **Read only** badge.
 - On the right: **Find**, **−**, the zoom percentage (click it for 100%), **+** and **Fit** (fits the
   sheet's used range in the window, 25–200%).
+- In a narrow window the buttons drop their labels (each keeps its icon and tooltip), then the
+  zoom steps (− % +), so the two groups never overlap (`viewer::bar_fit`).
 
 Below the toolbar come the notices, the grid, the sheet tabs and the status bar. With nothing
-open the window shows *GridCraft Viewer* and an **Open a workbook…** button. The window title is
+open the window shows *GridCraft Viewer* and an **Open a workbook…** button. File › Open also
+lists the built-in samples (budget, sales, grades). One opens read-only, in place of the empty
+window, through `sample::open` (`viewer::open_sample`). The window title is
 `<name> - GridCraft Viewer`.
 
 ## What is removed or turned off
@@ -56,7 +60,8 @@ open the window shows *GridCraft Viewer* and an **Open a workbook…** button. T
   reason. Allowed commands that touch view state (zoom, recalculation) leave no undo step and
   don't make the workbook dirty, so closing never asks to save.
 - **Typing, F2, Enter-to-edit, Delete/Backspace, cut, paste and the checkbox Space toggle** do
-  nothing on the grid. Enter only moves. Shortcuts bound to editing commands say why in a toast.
+  nothing on the grid and say why in the "read only" toast, as shortcuts bound to editing
+  commands do. Enter only moves.
 - **Mouse editing**: the fill handle, moving or resizing cells, objects, rows and columns, header
   autofit and validation pick-lists are off. Drags only select.
 - **Context menus**: the cell menu offers Copy, Select All, Find… and Go To…. The AutoFilter menu

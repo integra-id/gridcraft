@@ -1,5 +1,5 @@
-//! The viewer through real egui input: edits refused with the "read only" toast, Ctrl+F and the
-//! toolbar at narrow widths.
+//! The viewer through real egui input: edits refused with the "read only" toast, Ctrl+F, the
+//! toolbar at narrow widths and the File page's samples.
 
 use egui::{Event, Key, Modifiers};
 use egui_kittest::kittest::Queryable as _;
@@ -27,6 +27,12 @@ fn viewer_harness(width: f32) -> Harness {
     crate::common::harness_with(builder, crate::common::app(viewer_session()), 4)
 }
 
+fn key(h: &mut Harness, k: Key, m: Modifiers) {
+    h.input_mut().events.push(Event::Key { key: k, physical_key: Some(k), pressed: true, repeat: false, modifiers: m });
+    h.input_mut().events.push(Event::Key { key: k, physical_key: Some(k), pressed: false, repeat: false, modifiers: m });
+    h.run_steps(2);
+}
+
 fn click(h: &mut Harness, at: egui::Pos2) {
     h.input_mut().events.push(Event::PointerMoved(at));
     h.run_steps(2);
@@ -34,12 +40,6 @@ fn click(h: &mut Harness, at: egui::Pos2) {
         h.input_mut().events.push(Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE });
         h.run_steps(2);
     }
-    h.run_steps(2);
-}
-
-fn key(h: &mut Harness, k: Key, m: Modifiers) {
-    h.input_mut().events.push(Event::Key { key: k, physical_key: Some(k), pressed: true, repeat: false, modifiers: m });
-    h.input_mut().events.push(Event::Key { key: k, physical_key: Some(k), pressed: false, repeat: false, modifiers: m });
     h.run_steps(2);
 }
 
@@ -142,4 +142,21 @@ fn the_toolbar_fits_and_find_works_at_every_width() {
         click(&mut h, at);
         assert_eq!(h.state().dialog.as_ref().map(|d| d.name.as_str()), Some("find"), "{width}: Find opens");
     }
+}
+
+#[test]
+fn the_viewers_open_page_opens_a_sample_read_only() {
+    let mut h = viewer_harness(1200.0);
+    h.state_mut().run("ui.backstage", json!({"page": "open"})).unwrap();
+    h.run_steps(3);
+    let title = gridcraft_engine::sample::SAMPLES.iter().find(|(n, _)| *n == "sales").unwrap().1;
+    h.get_by_role_and_label(egui::accesskit::Role::Button, title).click();
+    h.run_steps(3);
+    let app = h.state();
+    assert!(app.backstage.is_none(), "opening the sample returns to the sheet");
+    assert_eq!(toast(&h), None, "the sample isn't refused");
+    let d = app.session.active().unwrap();
+    assert!(d.display_title().contains(title), "the sample is the active workbook: {}", d.display_title());
+    assert!(!d.wb.active().unwrap().cells.is_empty());
+    assert!(gridcraft_ui_egui::viewer::refuses(app, "cell.set").is_some(), "and it stays read-only");
 }
