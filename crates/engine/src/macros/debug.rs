@@ -569,7 +569,7 @@ pub(crate) fn recover(s: &mut Session) {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "macros"))]
 mod tests {
     use serde_json::json;
 

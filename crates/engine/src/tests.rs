@@ -5360,6 +5360,8 @@ fn a_script_cannot_switch_windows() {
 }
 
 mod equation;
+// Running macros needs the runtime (the `macros` feature, on by default).
+#[cfg(feature = "macros")]
 mod macros;
 mod objects;
 mod python_cells;

@@ -21,6 +21,19 @@ pub mod recorder;
 pub mod resolve;
 pub mod run;
 
+/// Whether this build runs macros (the `macros` feature). Without it `macro.run`, `macro.check`,
+/// `macro.record` and `macro.debug` refuse with [`NO_RUNTIME`], and the runner, recorder and
+/// debugger are left out of the build. Macros are still read with a file and written with a copy.
+pub const RUNTIME: bool = cfg!(feature = "macros");
+
+/// Why a macro command doesn't run in a build without the runtime ([`RUNTIME`]).
+pub const NO_RUNTIME: &str = "This build of GridCraft doesn't run macros";
+
+/// The error a macro command gives in a build without the runtime ([`RUNTIME`]).
+pub(crate) fn no_runtime(id: &str) -> crate::EngineError {
+    crate::EngineError::Disabled(id.to_string(), NO_RUNTIME.to_string())
+}
+
 /// The hidden-data key prefix of a stored macro (`macro_<n>`).
 const MACRO_KEY: &str = "macro_";
 

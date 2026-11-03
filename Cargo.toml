@@ -20,7 +20,9 @@ gridcraft-model = { path = "crates/model" }
 gridcraft-calc = { path = "crates/calc" }
 gridcraft-xlsx = { path = "crates/xlsx" }
 gridcraft-chart = { path = "crates/chart" }
-gridcraft-engine = { path = "crates/engine" }
+# Without its `macros` feature (see crates/engine/Cargo.toml): every crate that runs macros turns
+# it on, and the web viewer leaves it off.
+gridcraft-engine = { path = "crates/engine", default-features = false }
 gridcraft-ui-egui = { path = "crates/ui-egui", default-features = false }
 gridcraft-mcp = { path = "crates/mcp" }
 gridcraft-pdf = { path = "crates/pdf" }

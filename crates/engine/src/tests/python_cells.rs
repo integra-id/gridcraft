@@ -228,6 +228,7 @@ fn go_to_special_counts_a_python_cell_as_a_formula_not_a_constant() {
     assert_eq!(r["selection"], "A3", "{r}");
 }
 
+#[cfg(feature = "macros")]
 #[test]
 fn a_macro_counts_python_code_as_data_and_a_blocked_spill_as_no_write() {
     let mut s = s();

@@ -159,3 +159,25 @@ fn an_editor_session_is_not_a_viewer() {
     assert_eq!(s.doc().unwrap().wb.active().unwrap().value(CellRef::parse("A1").unwrap()), Value::Number(5.0));
     assert!(viewer::refuses_id("cell.set") && viewer::refuses_id("no.such") && !viewer::refuses_id("edit.copy"));
 }
+
+/// Without the macro runtime (the web viewer's build) the macro commands are there and say why
+/// they don't run, while a workbook's macros are still read and listed.
+#[cfg(not(feature = "macros"))]
+#[test]
+fn a_build_without_the_macro_runtime_refuses_to_run_macros() {
+    let mut s = Session::new();
+    s.new_workbook();
+    let steps = json!([{"type": "command", "id": "cell.set", "params": {"cell": "A1", "input": "1"}}]);
+    s.execute("macro.save", json!({"macro": {"name": "M", "steps": steps}})).unwrap();
+    assert_eq!(s.execute("macro.list", json!({})).unwrap().as_array().map(Vec::len), Some(1));
+    for (id, params) in [
+        ("macro.run", json!({"name": "M"})),
+        ("macro.check", json!({"name": "M"})),
+        ("macro.record", json!({})),
+        ("macro.debug", json!({"action": "start", "name": "M"})),
+    ] {
+        let err = s.execute(id, params).unwrap_err();
+        assert!(matches!(&err, EngineError::Disabled(_, why) if why == crate::macros::NO_RUNTIME), "{id}: {err}");
+    }
+    assert_eq!(s.doc().unwrap().wb.active().unwrap().value(CellRef::parse("A1").unwrap()), Value::Empty);
+}

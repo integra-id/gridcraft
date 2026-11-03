@@ -57,7 +57,7 @@ pub fn specs() -> Vec<CommandSpec> {
             None,
             "{action: start|step|continue|runTo|stop|state, name, inputs?, onConflict?, overwrite?, approve?, timeLimit?: seconds per action (start, as macro.run), step: path (runTo), keep?: bool (stop), breakpoints?: [\"3\", \"2.1\"] (steps of the macro), breakpointsOnly?: bool (the list replaces the steps' own breakpoints)} debugs a macro one step at a time; stop keeps the changes as one undo step or rolls them back. Runs on its own, never as a step of a script or macro. Until it finishes or stops, its workbook runs only macro.debug, queries, selection and sheet changes, Go To, Find, Copy, zoom, Switch Window, Close and Stop Action (other workbooks stay editable) → {state: paused|finished|stopped|failed, current: {step, kind, command?, params?, iteration?}, lastParams, executed, changed (at most 500), changedCells, atBreakpoint?, shifted?, wroteFiles?, message?, error?}",
             has_doc,
-            |s, p| crate::macros::debug::debug(s, p)
+            |s, p| if crate::macros::RUNTIME { crate::macros::debug::debug(s, p) } else { Err(crate::macros::no_runtime("macro.debug")) }
         ),
     ]
 }
@@ -177,6 +177,9 @@ fn rename(s: &mut Session, p: &Json) -> Result<Json> {
 }
 
 fn run(s: &mut Session, p: &Json) -> Result<Json> {
+    if !crate::macros::RUNTIME {
+        return Err(crate::macros::no_runtime("macro.run"));
+    }
     let name = name_param("macro.run", p)?;
     // While recording: the steps a recording keeps for this run, taken from the macro as it runs,
     // so saving or deleting the macro before the recording stops doesn't change what it saved.
@@ -195,11 +198,17 @@ fn run(s: &mut Session, p: &Json) -> Result<Json> {
 }
 
 fn check(s: &mut Session, p: &Json) -> Result<Json> {
+    if !crate::macros::RUNTIME {
+        return Err(crate::macros::no_runtime("macro.check"));
+    }
     let name = name_param("macro.check", p)?;
     crate::macros::run::check(s, name, p)
 }
 
 fn record(s: &mut Session, p: &Json) -> Result<Json> {
+    if !crate::macros::RUNTIME {
+        return Err(crate::macros::no_runtime("macro.record"));
+    }
     check_record_params(s.is_recording(), p)?;
     // `cancel` ends a recording without saving it: the way out of a recording whose macro
     // cannot be saved (a name the check refuses, a full workbook).

@@ -699,7 +699,7 @@ impl Session {
         }
         // A debugger whose undo group something else ended locks nothing any more (`macro.debug`
         // itself says that the run had ended).
-        if id != "macro.debug" {
+        if macros::RUNTIME && id != "macro.debug" {
             macros::debug::drop_if_ended(self);
         }
         let query = !spec.journal && !spec.undoable;
@@ -709,7 +709,7 @@ impl Session {
         // modes, stopping Record Actions, which saves a script), also when another command runs
         // it. Only the run's own steps go ahead. Other workbooks stay editable.
         let locked = self.active().is_some_and(|d| self.macro_debug.as_ref().is_some_and(|m| m.locks(d.uid) && !m.stepping()));
-        if locked && !macros::debug::runs_while_locked(id, query) {
+        if macros::RUNTIME && locked && !macros::debug::runs_while_locked(id, query) {
             return Err(EngineError::Disabled(id.to_string(), macros::debug::BUSY.into()));
         }
         let before = self.active().map(|d| (d.uid, d.wb.clone(), d.selection.clone()));
@@ -794,7 +794,9 @@ impl Session {
                 if self.depth == 0 {
                     // Only the `macro.debug` call itself can lose the run's place: a command nested
                     // in a step that panics is an error of that step, which the run handles.
-                    macros::debug::recover(self);
+                    if macros::RUNTIME {
+                        macros::debug::recover(self);
+                    }
                     self.trim_history();
                     self.group_step = None;
                 }

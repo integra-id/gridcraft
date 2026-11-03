@@ -213,6 +213,7 @@ fn output_refuses_cells_without_python_and_bad_modes() {
     assert!(s.execute("python.set", json!({"cell": "A1", "code": "1", "output": true})).is_err());
 }
 
+#[cfg(feature = "macros")]
 #[test]
 fn a_recorded_switch_keeps_the_return_type_it_set() {
     // python.output without `mode` switches, so a recording keeps the return type the switch set

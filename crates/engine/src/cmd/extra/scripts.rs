@@ -158,7 +158,9 @@ pub(super) fn stop_action(s: &mut Session, _: &Json) -> Result<Json> {
     let uid = s.doc()?.uid;
     let mut out = json!({"stopped": s.abort_groups(uid)});
     // A macro being debugged here had its group among them: its run is over.
-    if let Some((name, wrote_files)) = crate::macros::debug::end_stopped(s, uid) {
+    if crate::macros::RUNTIME
+        && let Some((name, wrote_files)) = crate::macros::debug::end_stopped(s, uid)
+    {
         out["macro"] = json!(name);
         out["message"] = json!(format!(
             "Macro '{name}', which was being debugged, was stopped and rolled back. {}",
