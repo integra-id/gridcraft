@@ -122,7 +122,10 @@ fn the_header_menu_hides_columns_and_editing_is_still_refused() {
     button(&mut h, header, PointerButton::Secondary, true);
     button(&mut h, header, PointerButton::Secondary, false);
     h.run_steps(2);
-    assert!(h.query_by_label("Delete…").is_none(), "the viewer's menu has no editing");
+    for edit in ["Cut", "Paste", "Insert", "Delete", "Clear Contents", "Column Width…", "Sort A to Z", "Group"] {
+        assert!(h.query_by_label(edit).is_none(), "the viewer's header menu has no {edit}");
+    }
+    assert!(h.query_by_label("AutoFit Column Width").is_some());
     let hide = h.get_by_label("Hide").rect().center();
     click(&mut h, hide);
     assert!(h.state().session.active().unwrap().wb.active().unwrap().is_col_hidden(1));
@@ -141,4 +144,27 @@ fn the_header_menu_hides_columns_and_editing_is_still_refused() {
     assert_eq!(h.state().toast.as_ref().map(|t| t.0.as_str()), Some(gridcraft_engine::viewer::REASON));
     assert_eq!(cells(&h), before);
     assert!(!h.state().session.active().unwrap().is_dirty());
+}
+
+#[test]
+fn a_tables_filter_list_in_the_viewer_filters_without_sorting() {
+    let mut s = Session::new();
+    s.execute("file.new", json!({"sample": "sales"})).unwrap();
+    let d = s.active_mut().unwrap();
+    d.saved = d.wb.clone();
+    d.undo.clear();
+    s.viewer = true;
+    let table = s.doc().unwrap().wb.active().unwrap().tables[0].range;
+    let mut h = crate::common::harness_with(crate::common::builder().with_size(vec2(1200.0, 800.0)), crate::common::app(s), 4);
+    h.state_mut().grid.filter_menu = Some((table.start.col, table.start.row, pos2(400.0, 150.0)));
+    h.run_steps(3);
+    assert!(h.query_by_label("↑  Sort Ascending").is_none() && h.query_by_label("↓  Sort Descending").is_none(), "no Sort in the viewer");
+    let north = h.get_by_label("North").rect().center();
+    click(&mut h, north);
+    let apply = h.get_by_label("Apply").rect().center();
+    click(&mut h, apply);
+    let d = h.state().session.active().unwrap();
+    let sh = d.wb.active().unwrap();
+    assert!((table.start.row + 1..=table.end.row).any(|r| sh.is_row_hidden(r)), "North is filtered out");
+    assert!(!d.is_dirty() && d.undo.is_empty());
 }

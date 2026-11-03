@@ -20,8 +20,10 @@ pub(super) fn filter_menu(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_
     let table_range = filter_table_range(sh, col, row);
     if viewer {
         if sh.autofilter.is_none() && table_range.is_some() {
-            // `data.filterBy` installs the table's filter around the selection.
+            // `data.filterBy` installs the table's filter around the selection (a view
+            // adjustment; `data.filter` is an edit), so the list has the table's values.
             let _ = app.session.run("selection.set", json!({"range": super::CellRef::new(row, col).a1()}));
+            let _ = app.session.run("data.filterBy", json!({"column": col_to_letters(col), "clear": true}));
         }
     } else if sh.autofilter.is_none()
         && let Some(r) = table_range
@@ -552,6 +554,10 @@ pub(super) fn header_menu(app: &mut SheetApp, ui: &mut egui::Ui, was_open: bool)
             if let Some(item) = insert_copied {
                 items.insert(5, item);
             }
+            // The viewer's header menu is its cell menu: copying, finding and view adjustments.
+            if app.is_viewer() {
+                items = viewer_items(app);
+            }
             let lang = crate::i18n::current(ui.ctx());
             for (label, id) in items {
                 if label == "-" {
@@ -565,6 +571,8 @@ pub(super) fn header_menu(app: &mut SheetApp, ui: &mut egui::Ui, was_open: bool)
                         "ui:rowHeight" => app.open_dialog("rowHeight", json!({})),
                         "ui:formatCells" => app.open_dialog("formatCells", json!({})),
                         "ui:columnWidth" => app.open_dialog("columnWidth", json!({})),
+                        "ui:find" => app.open_dialog("find", json!({})),
+                        "ui:goTo" => app.open_dialog("goTo", json!({})),
                         "edit.copy" | "edit.cut" => {
                             app.copy_to_clipboard(ui.ctx(), id);
                         }
