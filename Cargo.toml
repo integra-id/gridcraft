@@ -97,6 +97,17 @@ lto = "thin"
 codegen-units = 16
 debug = 0
 
+# The browser viewer's download (`trunk build --release`, see apps/gridcraft-web/index.html):
+# smallest code over fastest code, whole-program LTO, one codegen unit, no symbols. wasm32 has no
+# unwinding, so `abort` only drops the dead unwind paths.
+[profile.web]
+inherits = "release"
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort"
+
 # Keep the complete egui family and native event bridge on reviewed fork commits.
 [patch.crates-io]
 ecolor = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
